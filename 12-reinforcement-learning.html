@@ -26,6 +26,10 @@ button.primary{background:var(--accent);color:#fff}
 button.danger{background:#fee2e2;color:#b91c1c}
 label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
 input[type=range]{accent-color:var(--accent)}
+.tip{position:relative;cursor:help;color:var(--accent);font-weight:700;font-size:11px;line-height:1;border:1px solid currentColor;border-radius:999px;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.tip::after{content:attr(data-tip);position:absolute;bottom:150%;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;font-size:11px;font-weight:400;line-height:1.5;padding:8px 10px;border-radius:8px;width:210px;opacity:0;pointer-events:none;transition:opacity .15s;z-index:30;text-align:left;box-shadow:0 6px 16px rgba(0,0,0,.25)}
+.tip::before{content:'';position:absolute;bottom:135%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:#0f172a;opacity:0;transition:opacity .15s;z-index:30}
+.tip:hover::after,.tip:hover::before{opacity:1}
 .num{width:76px;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;font-size:14px;font-weight:600;text-align:center;background:#fff}
 .stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;font-size:13px}
 .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
@@ -59,19 +63,19 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <button id="play" class="primary">▶ เล่น/หยุด</button>
     <button id="resetQ" class="danger">ล้างความจำ (Q=0)</button>
     <button id="maze">🎲 เขาวงกตใหม่</button>
-    <label class="slider">ความเร็ว
+    <label class="slider">ความเร็ว <span class="tip" title="ความเร็ว" data-tip="ความเร็วของแอนิเมชัน — หน่วยเป็นมิลลิวินาทีต่อ 1 การกระทำของ agent">?</span>
       <input type="range" id="speed" min="20" max="400" value="120">
       <input type="number" id="speedn" class="num" min="20" max="400" step="10" value="120">
     </label>
-    <label class="slider">α (learning rate)
+    <label class="slider">α (learning rate) <span class="tip" title="Alpha" data-tip="ขนาดก้าวของการอัปเดต Q(s,a) — สูง = เรียนรู้เร็ว แต่ลืมของเก่าเร็ว">?</span>
       <input type="range" id="alpha" min="0.01" max="1" step="0.01" value="0.1">
       <input type="number" id="alphan" class="num" min="0.01" max="1" step="0.01" value="0.1">
     </label>
-    <label class="slider">γ (discount)
+    <label class="slider">γ (discount) <span class="tip" title="Gamma" data-tip="น้ำหนักของรางวัลอนาคต — ใกล้ 1 = วางแผนไกล (เห็นคุณค่าของเป้าหมายไกล ๆ), ใกล้ 0 = สนใจแค่รางวัลถัดไป">?</span>
       <input type="range" id="gamma" min="0.5" max="0.99" step="0.01" value="0.9">
       <input type="number" id="gamman" class="num" min="0.5" max="0.99" step="0.01" value="0.9">
     </label>
-    <label class="slider">ε เริ่มต้น
+    <label class="slider">ε เริ่มต้น <span class="tip" title="Epsilon" data-tip="โอกาสสุ่มสำรวจตอนเริ่ม — สูง = ลองเส้นทางใหม่เยอะ (ลดลงอัตโนมัติเมื่อเรียนรู้ไปนานขึ้น)">?</span>
       <input type="range" id="eps0" min="0.05" max="0.5" step="0.05" value="0.3">
       <input type="number" id="eps0n" class="num" min="0.05" max="0.5" step="0.05" value="0.3">
     </label>

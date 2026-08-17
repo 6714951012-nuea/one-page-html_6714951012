@@ -26,6 +26,10 @@ canvas{display:block;border-radius:10px;background:#fafcff;border:1px solid #e2e
 .controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;align-items:center}
 label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
 input[type=range]{accent-color:var(--accent)}
+.tip{position:relative;cursor:help;color:var(--accent);font-weight:700;font-size:11px;line-height:1;border:1px solid currentColor;border-radius:999px;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.tip::after{content:attr(data-tip);position:absolute;bottom:150%;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;font-size:11px;font-weight:400;line-height:1.5;padding:8px 10px;border-radius:8px;width:210px;opacity:0;pointer-events:none;transition:opacity .15s;z-index:30;text-align:left;box-shadow:0 6px 16px rgba(0,0,0,.25)}
+.tip::before{content:'';position:absolute;bottom:135%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:#0f172a;opacity:0;transition:opacity .15s;z-index:30}
+.tip:hover::after,.tip:hover::before{opacity:1}
 .num{width:76px;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;font-size:14px;font-weight:600;text-align:center;background:#fff}
 button{border:none;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;background:#e2e8f0;color:#0f172a;transition:.15s}
 button:hover{filter:brightness(.96)}
@@ -77,11 +81,11 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <button id="s1">แมว นั่ง บน เสื่อ</button>
     <button id="s2">AI เรียน รู้ ภาษา</button>
     <button id="s3">ฉัน รัก การ เรียนรู้</button>
-    <label class="slider">d_model
+    <label class="slider">d_model <span class="tip" title="d_model" data-tip="ขนาดเวกเตอร์ Q, K, V — มาก = แสดงความหมายของคำได้ละเอียดขึ้น">?</span>
       <input type="range" id="d" min="4" max="16" step="4" value="8">
       <input type="number" id="dn" class="num" min="4" max="16" step="4" value="8">
     </label>
-    <label class="slider">Temperature
+    <label class="slider">Temperature <span class="tip" title="Temperature" data-tip="ความเข้มข้นของ attention — ต่ำ = โฟกัสไม่กี่คำชัดเจน, สูง = กระจายความสนใจเท่า ๆ กัน">?</span>
       <input type="range" id="temp" min="0.1" max="2" step="0.1" value="1">
       <input type="number" id="tempn" class="num" min="0.1" max="2" step="0.1" value="1">
     </label>

@@ -27,6 +27,10 @@ button:hover{filter:brightness(.96)}
 button.primary{background:var(--accent);color:#fff}
 button.danger{background:#fee2e2;color:#b91c1c}
 select{border:1px solid #cbd5e1;border-radius:8px;padding:9px 12px;font-size:14px;background:#fff}
+.tip{position:relative;cursor:help;color:var(--accent);font-weight:700;font-size:11px;line-height:1;border:1px solid currentColor;border-radius:999px;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.tip::after{content:attr(data-tip);position:absolute;bottom:150%;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;font-size:11px;font-weight:400;line-height:1.5;padding:8px 10px;border-radius:8px;width:210px;opacity:0;pointer-events:none;transition:opacity .15s;z-index:30;text-align:left;box-shadow:0 6px 16px rgba(0,0,0,.25)}
+.tip::before{content:'';position:absolute;bottom:135%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:#0f172a;opacity:0;transition:opacity .15s;z-index:30}
+.tip:hover::after,.tip:hover::before{opacity:1}
 label.check{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600}
 .stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;font-size:13px}
 .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
@@ -75,11 +79,13 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
       <option value="blur">Blur (เบลอ)</option>
       <option value="diag">Diagonal (เส้นทแยง)</option>
     </select>
+    <span class="tip" title="Kernel" data-tip="ตัวกรอง 3×3 — แต่ละแบบจับ feature ต่างกัน เช่น ขอบภาพ, ความคม, ความเบลอ, เส้นทแยง">?</span>
     <select id="pselect">
       <option value="max" selected>Max Pooling</option>
       <option value="avg">Average Pooling</option>
     </select>
-    <label class="check"><input type="checkbox" id="relu" checked> ใช้ ReLU (ค่าลบ→0)</label>
+    <span class="tip" title="Pooling" data-tip="วิธีลดขนาดภาพ — Max เก็บค่าสูงสุดในบล็อก (จับ feature ที่เด่น), Average เฉลี่ยทั้งบล็อก (เรียบเนียน)">?</span>
+    <label class="check"><input type="checkbox" id="relu" checked> ใช้ ReLU (ค่าลบ→0) <span class="tip" title="ReLU" data-tip="Activation — ตัดค่าลบให้เป็น 0 ทำให้โมเดลเรียนรู้ความสัมพันธ์แบบไม่เชิงเส้นได้">?</span></label>
     <button id="resetP" class="danger">↺ ค่าเริ่มต้น</button>
     <span class="hint">🎨 คลิก/ลากบนภาพซ้ายเพื่อวาดเองได้</span>
   </div>

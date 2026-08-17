@@ -32,6 +32,10 @@ button.danger{background:#fee2e2;color:#b91c1c}
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
 label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
 input[type=range]{accent-color:var(--accent)}
+.tip{position:relative;cursor:help;color:var(--accent);font-weight:700;font-size:11px;line-height:1;border:1px solid currentColor;border-radius:999px;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.tip::after{content:attr(data-tip);position:absolute;bottom:150%;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;font-size:11px;font-weight:400;line-height:1.5;padding:8px 10px;border-radius:8px;width:210px;opacity:0;pointer-events:none;transition:opacity .15s;z-index:30;text-align:left;box-shadow:0 6px 16px rgba(0,0,0,.25)}
+.tip::before{content:'';position:absolute;bottom:135%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:#0f172a;opacity:0;transition:opacity .15s;z-index:30}
+.tip:hover::after,.tip:hover::before{opacity:1}
 .num{width:76px;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;font-size:14px;font-weight:600;text-align:center;background:#fff}
 .activeCls{border:3px solid #0f172a}
 .info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
@@ -52,11 +56,11 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <button id="train" class="primary">🌲 ฝึก Random Forest</button>
     <button id="rand">สุ่มข้อมูล</button>
     <button id="reset" class="danger">รีเซ็ต</button>
-    <label class="slider">จำนวนต้นไม้
+    <label class="slider">จำนวนต้นไม้ <span class="tip" title="จำนวนต้นไม้" data-tip="จำนวนต้นไม้ในป่า — ยิ่งมากผลโหวตรวมยิ่งเสถียร (ดู Acc เฉลี่ยต่อต้น vs รวม) แต่คำนวณช้าลง">?</span>
       <input type="range" id="nt" min="2" max="10" value="5">
       <input type="number" id="ntn" class="num" min="2" max="10" step="1" value="5">
     </label>
-    <label class="slider">ความลึกสูงสุด
+    <label class="slider">ความลึกสูงสุด <span class="tip" title="ความลึก" data-tip="ความลึกของต้นไม้แต่ละต้น — ลึกมาก = แต่ละต้น overfit แต่การโหวตของป่าช่วยลดผลกระทบได้">?</span>
       <input type="range" id="depth" min="2" max="5" value="3">
       <input type="number" id="depthn" class="num" min="2" max="5" step="1" value="3">
     </label>
