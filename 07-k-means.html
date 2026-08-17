@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>k-Means Clustering — ML Visualizer</title>
+<style>
+:root{--accent:#db2777;--bg:#f1f5f9;--card:#fff;--ink:#0f172a;--mut:#64748b;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;align-items:center;padding:28px 16px;gap:20px}
+header{text-align:center}
+.badge{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--accent);border-radius:999px;padding:4px 14px;margin-bottom:10px}
+h1{font-size:30px}
+.sub{color:var(--mut);margin-top:6px;max-width:680px}
+.card{background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:18px;max-width:880px;width:100%}
+canvas{display:block;width:100%;height:auto;border-radius:10px;background:#fafcff;border:1px solid #e2e8f0}
+.controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center}
+button{border:none;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;background:#e2e8f0;color:#0f172a;transition:.15s}
+button:hover{filter:brightness(.96)}
+button.primary{background:var(--accent);color:#fff}
+button.danger{background:#fee2e2;color:#b91c1c}
+label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+input[type=range]{accent-color:var(--accent)}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;font-size:13px}
+.stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
+.stat b{color:var(--accent);font-size:15px}
+.hint{color:var(--mut);font-size:13px;margin-left:auto}
+.info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
+.info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
+code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div class="badge">Unsupervised Learning</div>
+  <h1>k-Means Clustering</h1>
+  <p class="sub">จัดกลุ่มข้อมูลโดยไม่รู้ label ล่วงหน้า — สุ่มจุดศูนย์กลาง (centroid) <b>k</b> จุด แล้วสลับขั้น <b>Assign</b> กับ <b>Update</b> ซ้ำจนกลุ่มคงที่</p>
+</header>
+<div class="card">
+  <canvas id="c" width="820" height="460"></canvas>
+  <div class="controls">
+    <button id="auto" class="primary">▶ วิ่งอัตโนมัติ</button>
+    <button id="step">ขั้นเดียว (1 iteration)</button>
+    <button id="cent">สุ่ม centroid ใหม่</button>
+    <button id="rand">สุ่มข้อมูล</button>
+    <button id="reset" class="danger">รีเซ็ต</button>
+    <label class="slider">k =
+      <input type="range" id="k" min="2" max="6" value="4">
+      <b id="kv">4</b>
+    </label>
+  </div>
+  <div class="stats">
+    <div class="stat">Iteration: <b id="iter">0</b></div>
+    <div class="stat">SSE (ผลรวมระยะทาง²): <b id="sse">—</b></div>
+    <div class="stat">สถานะ: <b id="state">ยังไม่ลู่เข้า</b></div>
+  </div>
+</div>
+<div class="info">
+  <h2>หลักการทำงาน</h2>
+  <p>k-Means เป็น <b>Unsupervised Learning</b> ทำซ้ำ 2 ขั้นตอน:<br>
+  1. <b>Assign</b> — จับคู่ทุกจุดกับ centroid ที่ใกล้ที่สุด<br>
+  2. <b>Update</b> — เลื่อน centroid ไปยังค่าเฉลี่ยของจุดในกลุ่ม<br>
+  ทำจน centroid ไม่ขยับอีก (converge) เป้าหมายคือลด <b>SSE</b> (ผลรวมระยะทางยกกำลังสองจากจุดถึง centroid ของตัวเอง) ให้เหลือน้อยที่สุด</p>
+</div>
+<script>
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+const L=58,R=20,T=26,B=46;
+const $=id=>document.getElementById(id);
+const rand=(a,b)=>a+Math.random()*(b-a);
+const PAL=['#ef4444','#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899'];
+let pts=[], centroids=[], assign=[], k=4, iter=0, running=false, raf=null, converged=false;
+
+function genData(n){
+  pts=[];
+  const centers=[[0.25,0.3],[0.7,0.72],[0.72,0.28],[0.28,0.72]];
+  for(let i=0;i<n;i++){
+    const c=centers[Math.floor(Math.random()*centers.length)];
+    pts.push({x:c[0]+rand(-0.11,0.11), y:c[1]+rand(-0.11,0.11)});
+  }
+  initCentroids();
+}
+function initCentroids(){
+  centroids=[];
+  assign=new Array(pts.length).fill(0);
+  const shuf=[...pts].sort(()=>Math.random()-0.5);
+  for(let i=0;i<k;i++)centroids.push({x:shuf[i].x,y:shuf[i].y});
+  iter=0;converged=false;$('state').textContent='ยังไม่ลู่เข้า';
+}
+function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
+
+function assignStep(){
+  for(let i=0;i<pts.length;i++){
+    let bd=1e9,bi=0;
+    for(let j=0;j<centroids.length;j++){
+      const d=(pts[i].x-centroids[j].x)**2+(pts[i].y-centroids[j].y)**2;
+      if(d<bd){bd=d;bi=j;}
+    }
+    assign[i]=bi;
+  }
+}
+function updateStep(){
+  const sums=centroids.map(()=>({x:0,y:0,n:0}));
+  for(let i=0;i<pts.length;i++){sums[assign[i]].x+=pts[i].x;sums[assign[i]].y+=pts[i].y;sums[assign[i]].n++;}
+  let moved=false;
+  for(let j=0;j<centroids.length;j++){
+    if(!sums[j].n)continue;
+    const nx=sums[j].x/sums[j].n, ny=sums[j].y/sums[j].n;
+    if(Math.abs(nx-centroids[j].x)>1e-4||Math.abs(ny-centroids[j].y)>1e-4)moved=true;
+    centroids[j]={x:nx,y:ny};
+  }
+  iter++;
+  return moved;
+}
+function sse(){
+  let s=0;
+  for(let i=0;i<pts.length;i++){
+    const c=centroids[assign[i]];
+    s+=(pts[i].x-c.x)**2+(pts[i].y-c.y)**2;
+  }
+  return s;
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // region shading (nearest centroid)
+  const cols=60, rows=36;
+  for(let gy=0;gy<rows;gy++){
+    for(let gx=0;gx<cols;gx++){
+      const qx=(gx+0.5)/cols, qy=1-(gy+0.5)/rows;
+      let bd=1e9,bi=0;
+      for(let j=0;j<centroids.length;j++){
+        const d=(qx-centroids[j].x)**2+(qy-centroids[j].y)**2;
+        if(d<bd){bd=d;bi=j;}
+      }
+      ctx.fillStyle=hexA(PAL[bi],0.13);
+      ctx.fillRect(L+gx*(W-L-R)/cols,T+gy*(H-T-B)/rows,Math.ceil((W-L-R)/cols)+1,Math.ceil((H-T-B)/rows)+1);
+    }
+  }
+  ctx.lineWidth=1;ctx.strokeStyle='#e8eef5';
+  for(let i=0;i<=10;i++){
+    const gx=L+(W-L-R)*i/10;ctx.beginPath();ctx.moveTo(gx,T);ctx.lineTo(gx,H-B);ctx.stroke();
+    const gy=T+(H-T-B)*i/10;ctx.beginPath();ctx.moveTo(L,gy);ctx.lineTo(W-R,gy);ctx.stroke();
+  }
+  ctx.fillStyle='#94a3b8';ctx.font='11px sans-serif';ctx.textAlign='center';
+  for(let i=0;i<=10;i+=2)ctx.fillText((i/10).toFixed(1),L+(W-L-R)*i/10,H-B+16);
+  ctx.textAlign='right';
+  for(let i=0;i<=10;i+=2)ctx.fillText((i/10).toFixed(1),L-8,T+(H-T-B)*(1-i/10)+3);
+  // points
+  for(let i=0;i<pts.length;i++){
+    const c=px(pts[i]);
+    ctx.beginPath();ctx.arc(c.x,c.y,5,0,Math.PI*2);
+    ctx.fillStyle=PAL[assign[i]%PAL.length];ctx.fill();
+    ctx.lineWidth=1;ctx.strokeStyle='rgba(0,0,0,.25)';ctx.stroke();
+  }
+  // centroids
+  for(let j=0;j<centroids.length;j++){
+    const c=px(centroids[j]);
+    ctx.fillStyle='#0f172a';
+    ctx.beginPath();ctx.arc(c.x,c.y,10,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.moveTo(c.x,c.y-6);ctx.lineTo(c.x+4,c.y);ctx.lineTo(c.x,c.y+6);ctx.lineTo(c.x-4,c.y);ctx.closePath();
+    ctx.fillStyle=PAL[j%PAL.length];ctx.fill();
+    ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+  }
+  $('iter').textContent=iter;
+  $('sse').textContent=pts.length?sse().toFixed(2):'—';
+  $('state').textContent=converged?'✅ ลู่เข้าแล้ว':'ยังไม่ลู่เข้า';
+}
+function hexA(hex,a){
+  const n=parseInt(hex.slice(1),16);
+  return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';
+}
+function doIteration(){
+  assignStep();
+  const moved=updateStep();
+  if(!moved){converged=true;$('state').textContent='✅ ลู่เข้าแล้ว';}
+  draw();
+  return moved;
+}
+
+function loop(){
+  if(!running)return;
+  const moved=doIteration();
+  if(!moved){stop();$('auto').textContent='▶ วิ่งอัตโนมัติ';return;}
+  raf=requestAnimationFrame(loop);
+}
+function start(){if(!pts.length)return;running=true;$('auto').textContent='⏸ หยุด';if(raf)cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
+function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=null;}
+
+$('auto').onclick=()=>{running?stop():(resetIter(),start());};
+$('step').onclick=()=>{stop();if(!converged)doIteration();};
+$('cent').onclick=()=>{stop();initCentroids();draw();};
+$('rand').onclick=()=>{stop();genData(90);draw();};
+$('reset').onclick=()=>{stop();initCentroids();draw();};
+$('k').oninput=e=>{k=+e.target.value;$('kv').textContent=k;stop();initCentroids();draw();};
+function resetIter(){iter=0;converged=false;}
+
+genData(90);draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Random Forest — ML Visualizer</title>
+<style>
+:root{--accent:#b45309;--bg:#f1f5f9;--card:#fff;--ink:#0f172a;--mut:#64748b;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;align-items:center;padding:28px 16px;gap:20px}
+header{text-align:center}
+.badge{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--accent);border-radius:999px;padding:4px 14px;margin-bottom:10px}
+h1{font-size:30px}
+.sub{color:var(--mut);margin-top:6px;max-width:680px}
+.card{background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:18px;max-width:880px;width:100%}
+.card h3{font-size:15px;color:var(--mut);margin:6px 0 10px;font-weight:600}
+canvas{display:block;width:100%;height:auto;border-radius:10px;background:#fafcff;border:1px solid #e2e8f0}
+.canvasrow{display:flex;gap:10px;flex-wrap:wrap}
+.canvasrow .mini{flex:1;min-width:130px;text-align:center}
+.canvasrow .mini p{font-size:11px;color:var(--mut);margin-top:4px;font-weight:600}
+.canvasrow .mini canvas{border-radius:8px}
+.controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center}
+button{border:none;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;background:#e2e8f0;color:#0f172a;transition:.15s}
+button:hover{filter:brightness(.96)}
+button.primary{background:var(--accent);color:#fff}
+button.danger{background:#fee2e2;color:#b91c1c}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;font-size:13px}
+.stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
+.stat b{color:var(--accent);font-size:15px}
+.hint{color:var(--mut);font-size:13px;margin-left:auto}
+.info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
+.info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
+code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div class="badge">Supervised Learning</div>
+  <h1>Random Forest</h1>
+  <p class="sub">รวมผลจาก <b>Decision Tree หลายต้น</b> ที่ฝึกบนข้อมูลสุ่ม (Bagging + Feature Randomness) แล้วโหวตผลลัพธ์ร่วมกัน (Ensemble)</p>
+</header>
+<div class="card">
+  <canvas id="c" width="820" height="400"></canvas>
+  <div class="controls">
+    <button id="train" class="primary">🌲 ฝึก Random Forest</button>
+    <button id="rand">สุ่มข้อมูล</button>
+    <button id="reset" class="danger">รีเซ็ต</button>
+    <span class="hint">ต้นไม้แต่ละต้นโหวต แล้วรวมกันเป็นคำตอบสุดท้าย</span>
+  </div>
+  <div class="stats">
+    <div class="stat">ต้นไม้ที่ฝึกแล้ว: <b id="done">0 / 5</b></div>
+    <div class="stat">Accuracy (ชุดฝึก): <b id="acc">—</b></div>
+  </div>
+</div>
+<div class="card">
+  <h3>ขอบเขตการตัดสินใจของต้นไม้แต่ละต้น (แต่ละต้นเห็นข้อมูลคนละชุด → ขอบเขตต่างกัน)</h3>
+  <div class="canvasrow" id="minis"></div>
+</div>
+<div class="info">
+  <h2>หลักการทำงาน</h2>
+  <p><b>Bagging (Bootstrap Aggregating):</b> สุ่มตัวอย่างข้อมูลแบบใส่คืน (bootstrap) ให้ต้นไม้แต่ละต้นฝึกคนละชุด + ในการแบ่งแต่ละโหนดจะสุ่มเลือก feature เพียงบางส่วน ทำให้ต้นไม้แต่ละต้น "เห็นโลกต่างกัน" เวลาทำนายจึงโหวตด้วยเสียงข้างมาก ทำให้ variance ลดลง และลดการ overfit เมื่อเทียบกับ Decision Tree ต้นเดียว</p>
+</div>
+<script>
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+const L=58,R=20,T=26,B=46;
+const $=id=>document.getElementById(id);
+const rand=(a,b)=>a+Math.random()*(b-a);
+const C0=[239,68,68], C1=[59,130,246];
+const MTREES=5;
+let pts=[], trees=[], trained=0, running=false, timer=null;
+
+function genData(n){
+  pts=[];
+  for(let i=0;i<n;i++){
+    const b=Math.floor(Math.random()*4);
+    const bx=b%2, by=Math.floor(b/2);
+    const x=bx*0.5+0.25+rand(-0.14,0.14);
+    const y=by*0.5+0.25+rand(-0.14,0.14);
+    const c=(bx^by)?1:0;
+    pts.push({x,y,c});
+  }
+  reset();
+}
+function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
+function reset(){trees=[];trained=0;running=false;clearTimer();$('train').textContent='🌲 ฝึก Random Forest';$('done').textContent='0 / '+MTREES;$('acc').textContent='—';setupMinis();draw();drawMinis();}
+
+function gini(arr){
+  if(!arr.length)return 0;
+  const c0=arr.filter(i=>pts[i].c===0).length/arr.length;
+  return 1-c0*c0-(1-c0)*(1-c0);
+}
+function buildTree(inds,depth){
+  const node={leaf:false,left:null,right:null,f:null,t:null,label:0};
+  if(depth>=3||inds.length<4||gini(inds)<1e-6){
+    node.leaf=true;
+    node.label=inds.filter(i=>pts[i].c===1).length>=inds.length/2?1:0;
+    return node;
+  }
+  // random feature per split (feature randomness)
+  const fs=['x','y'];
+  let best=null;
+  for(const f of fs){
+    if(Math.random()<0.5&&fs.length>1)continue; // สุ่มเลือก feature
+    const vals=[...new Set(inds.map(i=>pts[i][f]))].sort((a,b)=>a-b);
+    for(let j=0;j<vals.length-1;j++){
+      const t=(vals[j]+vals[j+1])/2;
+      const left=inds.filter(i=>pts[i][f]<=t), right=inds.filter(i=>pts[i][f]>t);
+      if(!left.length||!right.length)continue;
+      const g=gini(inds)-(left.length/inds.length)*gini(left)-(right.length/inds.length)*gini(right);
+      if(!best||g>best.g)best={f,t,left,right,g};
+    }
+  }
+  if(!best||best.g<1e-4){
+    node.leaf=true;
+    node.label=inds.filter(i=>pts[i].c===1).length>=inds.length/2?1:0;
+    return node;
+  }
+  node.f=best.f;node.t=best.t;
+  node.left=buildTree(best.left,depth+1);
+  node.right=buildTree(best.right,depth+1);
+  return node;
+}
+function treePredict(t,x,y){
+  let n=t;
+  while(!n.leaf){
+    n=(n.f==='x'?x:y)<=n.t?n.left:n.right;
+  }
+  return n.label;
+}
+function ensembleVote(x,y){
+  let v=0;
+  for(const t of trees)v+=treePredict(t,x,y);
+  return v/trees.length;
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // ensemble boundary
+  if(trees.length){
+    const cols=60, rows=36;
+    for(let gy=0;gy<rows;gy++){
+      for(let gx=0;gx<cols;gx++){
+        const v=ensembleVote((gx+0.5)/cols,1-(gy+0.5)/rows);
+        const r=Math.round(C0[0]+(C1[0]-C0[0])*v), g=Math.round(C0[1]+(C1[1]-C0[1])*v), bl=Math.round(C0[2]+(C1[2]-C0[2])*v);
+        ctx.fillStyle='rgba('+r+','+g+','+bl+',0.30)';
+        ctx.fillRect(L+gx*(W-L-R)/cols,T+gy*(H-T-B)/rows,Math.ceil((W-L-R)/cols)+1,Math.ceil((H-T-B)/rows)+1);
+      }
+    }
+  }
+  ctx.lineWidth=1;ctx.strokeStyle='#e8eef5';
+  for(let i=0;i<=10;i++){
+    const gx=L+(W-L-R)*i/10;ctx.beginPath();ctx.moveTo(gx,T);ctx.lineTo(gx,H-B);ctx.stroke();
+    const gy=T+(H-T-B)*i/10;ctx.beginPath();ctx.moveTo(L,gy);ctx.lineTo(W-R,gy);ctx.stroke();
+  }
+  ctx.fillStyle='#94a3b8';ctx.font='11px sans-serif';ctx.textAlign='center';
+  for(let i=0;i<=10;i+=2)ctx.fillText((i/10).toFixed(1),L+(W-L-R)*i/10,H-B+16);
+  ctx.textAlign='right';
+  for(let i=0;i<=10;i+=2)ctx.fillText((i/10).toFixed(1),L-8,T+(H-T-B)*(1-i/10)+3);
+  for(const p of pts){
+    const c=px(p), col=p.c===0?C0:C1;
+    ctx.beginPath();ctx.arc(c.x,c.y,4.5,0,Math.PI*2);
+    ctx.fillStyle='rgb('+col.join(',')+')';ctx.fill();
+    ctx.lineWidth=1;ctx.strokeStyle='rgba(0,0,0,.3)';ctx.stroke();
+  }
+  if(trees.length){
+    let ok=0;
+    for(const p of pts)if((ensembleVote(p.x,p.y)>=0.5?1:0)===p.c)ok++;
+    $('acc').textContent=(ok/pts.length*100).toFixed(1)+'%';
+  }
+  $('done').textContent=trained+' / '+MTREES;
+}
+
+function drawMinis(){
+  const minis=document.querySelectorAll('.mini canvas');
+  for(let i=0;i<minis.length;i++){
+    const mc=minis[i], mctx=mc.getContext('2d');
+    const mw=mc.width,mh=mc.height;
+    mctx.clearRect(0,0,mw,mh);
+    mctx.fillStyle='#fafcff';mctx.fillRect(0,0,mw,mh);
+    if(i<trained){
+      const t=trees[i];
+      const cols=28,rows=20;
+      for(let gy=0;gy<rows;gy++){
+        for(let gx=0;gx<cols;gx++){
+          const v=treePredict(t,(gx+0.5)/cols,1-(gy+0.5)/rows);
+          const col=v===0?C0:C1;
+          mctx.fillStyle='rgba('+col.join(',')+',0.4)';
+          mctx.fillRect(gx*mw/cols,gy*mh/rows,mw/cols+1,mh/rows+1);
+        }
+      }
+    }
+    const sx=mw*0.05, ex=mw*0.95, sy=mh*0.95, ey=mh*0.05;
+    for(const p of pts){
+      const col=p.c===0?C0:C1;
+      mctx.beginPath();mctx.arc(sx+p.x*(ex-sx),sy-p.y*(sy-ey),2,0,Math.PI*2);
+      mctx.fillStyle='rgb('+col.join(',')+')';mctx.fill();
+    }
+  }
+}
+function setupMinis(){
+  const row=$('minis');row.innerHTML='';
+  for(let i=0;i<MTREES;i++){
+    const d=document.createElement('div');d.className='mini';
+    const c=document.createElement('canvas');c.width=150;c.height=110;
+    const p=document.createElement('p');p.textContent='ต้นไม้ที่ '+(i+1);
+    d.appendChild(c);d.appendChild(p);row.appendChild(d);
+  }
+}
+function clearTimer(){if(timer){clearInterval(timer);timer=null;}}
+
+$('train').onclick=()=>{
+  if(running){clearTimer();running=false;$('train').textContent='🌲 ฝึก Random Forest';return;}
+  if(trained>=MTREES){reset();}
+  running=true;$('train').textContent='⏸ หยุด';
+  timer=setInterval(()=>{
+    // bootstrap sample
+    const inds=[];
+    for(let i=0;i<pts.length;i++)inds.push(Math.floor(Math.random()*pts.length));
+    trees.push(buildTree(inds,0));
+    trained++;
+    draw();drawMinis();
+    if(trained>=MTREES){clearTimer();running=false;$('train').textContent='🌲 ฝึก Random Forest';}
+  },700);
+};
+$('rand').onclick=()=>{genData(110);};
+$('reset').onclick=()=>{reset();};
+
+genData(110);draw();drawMinis();
+</script>
+</body>
+</html>

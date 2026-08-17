@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>k-Nearest Neighbors (kNN) — ML Visualizer</title>
+<style>
+:root{--accent:#0d9488;--bg:#f1f5f9;--card:#fff;--ink:#0f172a;--mut:#64748b;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;align-items:center;padding:28px 16px;gap:20px}
+header{text-align:center}
+.badge{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--accent);border-radius:999px;padding:4px 14px;margin-bottom:10px}
+h1{font-size:30px}
+.sub{color:var(--mut);margin-top:6px;max-width:680px}
+.card{background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:18px;max-width:880px;width:100%}
+canvas{display:block;width:100%;height:auto;border-radius:10px;background:#fafcff;border:1px solid #e2e8f0;cursor:crosshair}
+.controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center}
+button{border:none;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;background:#e2e8f0;color:#0f172a;transition:.15s}
+button:hover{filter:brightness(.96)}
+button.primary{background:var(--accent);color:#fff}
+button.danger{background:#fee2e2;color:#b91c1c}
+button.activeCls{border:3px solid #0f172a}
+label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+input[type=range]{accent-color:var(--accent)}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;font-size:13px}
+.stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
+.stat b{color:var(--accent);font-size:15px}
+.hint{color:var(--mut);font-size:13px;margin-left:auto}
+.info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
+.info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
+code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div class="badge">Supervised Learning</div>
+  <h1>k-Nearest Neighbors (kNN)</h1>
+  <p class="sub">จำแนกจุดใหม่โดยดู <b>k เพื่อนบ้านที่ใกล้ที่สุด</b> แล้วใช้เสียงส่วนใหญ่ (Majority Vote) กำหนดคลาส</p>
+</header>
+<div class="card">
+  <canvas id="c" width="820" height="460"></canvas>
+  <div class="controls">
+    <button id="rand" class="primary">สุ่มข้อมูล</button>
+    <button id="cls0" class="activeCls" style="background:#fee2e2;color:#b91c1c">เพิ่ม Class 0 (แดง)</button>
+    <button id="cls1" style="background:#dbeafe;color:#1d4ed8">เพิ่ม Class 1 (น้ำเงิน)</button>
+    <button id="clear" class="danger">ล้าง</button>
+    <label class="slider">k =
+      <input type="range" id="k" min="1" max="15" value="5">
+      <b id="kv">5</b>
+    </label>
+    <span class="hint">💡 เลื่อนเมาส์เพื่อทดสอบจุดใหม่ • คลิกเพื่อเพิ่มจุด</span>
+  </div>
+  <div class="stats">
+    <div class="stat">จุดทดสอบถูกจัดเป็น: <b id="pred">—</b></div>
+    <div class="stat">จำนวนจุด: <b id="n">0</b></div>
+  </div>
+</div>
+<div class="info">
+  <h2>หลักการทำงาน</h2>
+  <p>kNN เป็นอัลกอริทึมแบบ <b>Instance-based / Lazy learning</b> คือไม่มีการฝึก แต่จำข้อมูลทั้งหมดไว้ ตอนทำนายจะคำนวณระยะทาง (Euclidean) จากจุดใหม่ไปยังทุกจุด แล้วเลือก <code>k</code> จุดที่ใกล้ที่สุด คลาสที่โหวตได้เสียงข้างมากคือคำตอบ พื้นหลังแสดงขอบเขตการตัดสินใจ (Decision Boundary) ที่เปลี่ยนไปตามค่า k</p>
+</div>
+<script>
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+const L=58,R=20,T=26,B=46;
+const $=id=>document.getElementById(id);
+const rand=(a,b)=>a+Math.random()*(b-a);
+const C0=[239,68,68], C1=[59,130,246];
+let pts=[], k=5, q=null, selClass=0;
+let boundGrid=[];
+
+function genData(n){
+  pts=[];
+  for(let i=0;i<n;i++){
+    const c=Math.random()<0.5?0:1;
+    let x,y;
+    if(c===0){x=rand(0.05,0.5);y=rand(0.05,0.5);}
+    else{x=rand(0.5,0.95);y=rand(0.5,0.95);}
+    pts.push({x,y,c});
+  }
+  computeBoundary();
+}
+function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
+function inv(c){return {x:(c.x-L)/(W-L-R), y:1-(c.y-T)/(H-T-B)}}
+
+function classify(p){
+  if(!pts.length)return null;
+  const ds=pts.map((pt,i)=>({i,d:(pt.x-p.x)**2+(pt.y-p.y)**2})).sort((a,b)=>a.d-b.d);
+  const nn=ds.slice(0,k);
+  let v0=0,v1=0;
+  for(const x of nn){pts[x.i].c===0?v0++:v1++;}
+  const c=(v0>v1?0:(v1>v0?1:(pts[nn[0].i].c)));
+  return {cls:c, nn};
+}
+function computeBoundary(){
+  boundGrid=[];
+  const cols=60, rows=36;
+  for(let gy=0;gy<rows;gy++){
+    const row=[];
+    for(let gx=0;gx<cols;gx++){
+      const r=classify({x:(gx+0.5)/cols, y:1-(gy+0.5)/rows});
+      row.push(r?r.cls:0);
+    }
+    boundGrid.push(row);
+  }
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // boundary
+  const cols=60, rows=36;
+  for(let gy=0;gy<rows;gy++){
+    for(let gx=0;gx<cols;gx++){
+      const col=boundGrid[gy][gx]===0?C0:C1;
+      const rx=L+gx*(W-L-R)/cols, ry=T+gy*(H-T-B)/rows, rs=Math.ceil((W-L-R)/cols)+1;
+      ctx.fillStyle='rgba('+col.join(',')+',0.16)';
+      ctx.fillRect(rx,ry,rs,rs);
+    }
+  }
+  // grid + labels
+  ctx.lineWidth=1;ctx.strokeStyle='#e8eef5';
+  for(let i=0;i<=10;i++){
+    const gx=L+(W-L-R)*i/10;ctx.beginPath();ctx.moveTo(gx,T);ctx.lineTo(gx,H-B);ctx.stroke();
+    const gy=T+(H-T-B)*i/10;ctx.beginPath();ctx.moveTo(L,gy);ctx.lineTo(W-R,gy);ctx.stroke();
+  }
+  ctx.fillStyle='#94a3b8';ctx.font='11px sans-serif';ctx.textAlign='center';
+  for(let i=0;i<=10;i+=2)ctx.fillText((i/10).toFixed(1),L+(W-L-R)*i/10,H-B+16);
+  ctx.textAlign='right';
+  for(let i=0;i<=10;i+=2)ctx.fillText((i/10).toFixed(1),L-8,T+(H-T-B)*(1-i/10)+3);
+  // points
+  for(const p of pts){
+    const c=px(p), col=p.c===0?C0:C1;
+    ctx.beginPath();ctx.arc(c.x,c.y,5,0,Math.PI*2);
+    ctx.fillStyle='rgb('+col.join(',')+')';ctx.fill();
+    ctx.lineWidth=1.2;ctx.strokeStyle='rgba(0,0,0,.3)';ctx.stroke();
+  }
+  // query point
+  if(q){
+    const qc=px(q);
+    const r=classify(q);
+    if(r&&r.nn.length){
+      const kth=px(pts[r.nn[r.nn.length-1].i]);
+      const rad=Math.hypot(qc.x-kth.x,qc.y-kth.y);
+      // circle to k-th neighbor
+      ctx.beginPath();ctx.arc(qc.x,qc.y,rad,0,Math.PI*2);
+      ctx.strokeStyle='rgba(15,23,42,.35)';ctx.setLineDash([5,4]);ctx.lineWidth=1.5;ctx.stroke();ctx.setLineDash([]);
+      // lines to neighbors
+      ctx.lineWidth=1;
+      for(const x of r.nn){
+        const nc=px(pts[x.i]);
+        ctx.strokeStyle=pts[x.i].c===0?'rgba(239,68,68,.55)':'rgba(59,130,246,.55)';
+        ctx.beginPath();ctx.moveTo(qc.x,qc.y);ctx.lineTo(nc.x,nc.y);ctx.stroke();
+      }
+      // highlight neighbors
+      for(const x of r.nn){
+        const nc=px(pts[x.i]);
+        ctx.beginPath();ctx.arc(nc.x,nc.y,7,0,Math.PI*2);
+        ctx.strokeStyle=pts[x.i].c===0?'#dc2626':'#2563eb';ctx.lineWidth=2.5;ctx.stroke();
+      }
+      // query marker
+      const col=r.cls===0?C0:C1;
+      ctx.beginPath();ctx.arc(qc.x,qc.y,9,0,Math.PI*2);
+      ctx.fillStyle='rgba('+col.join(',')+',0.9)';ctx.fill();
+      ctx.lineWidth=3;ctx.strokeStyle='#fff';ctx.stroke();
+      ctx.beginPath();ctx.arc(qc.x,qc.y,13,0,Math.PI*2);
+      ctx.strokeStyle='rgb('+col.join(',')+')';ctx.stroke();
+      $('pred').innerHTML='<span style="color:rgb('+col.join(',')+')">Class '+r.cls+'</span>';
+    }
+  }
+  $('n').textContent=pts.length;
+}
+
+let moveT=null;
+canvas.addEventListener('mousemove',e=>{
+  const r=canvas.getBoundingClientRect();
+  const c=inv({x:(e.clientX-r.left)*(W/r.width),y:(e.clientY-r.top)*(H/r.height)});
+  if(c.x<0||c.x>1||c.y<0||c.y>1){q=null;draw();return;}
+  q=c;
+  if(moveT)clearTimeout(moveT);
+  moveT=setTimeout(()=>{computeBoundary();draw();},80);
+});
+canvas.addEventListener('mouseleave',()=>{q=null;draw();});
+canvas.addEventListener('click',e=>{
+  const r=canvas.getBoundingClientRect();
+  const c=inv({x:(e.clientX-r.left)*(W/r.width),y:(e.clientY-r.top)*(H/r.height)});
+  if(c.x<0.02||c.x>0.98||c.y<0.02||c.y>0.98)return;
+  pts.push({x:Math.max(0,Math.min(1,c.x)),y:Math.max(0,Math.min(1,c.y)),c:selClass});
+  computeBoundary();draw();
+});
+
+$('rand').onclick=()=>{genData(36);draw();};
+$('clear').onclick=()=>{pts=[];computeBoundary();draw();};
+$('k').oninput=e=>{k=+e.target.value;$('kv').textContent=k;computeBoundary();draw();};
+$('cls0').onclick=()=>{selClass=0;$('cls0').classList.add('activeCls');$('cls1').classList.remove('activeCls');};
+$('cls1').onclick=()=>{selClass=1;$('cls1').classList.add('activeCls');$('cls0').classList.remove('activeCls');};
+
+genData(36);draw();
+</script>
+</body>
+</html>

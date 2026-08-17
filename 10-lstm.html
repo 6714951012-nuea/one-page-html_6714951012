@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LSTM (Long Short-Term Memory) — ML Visualizer</title>
+<style>
+:root{--accent:#16a34a;--bg:#f1f5f9;--card:#fff;--ink:#0f172a;--mut:#64748b;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;align-items:center;padding:28px 16px;gap:20px}
+header{text-align:center}
+.badge{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--accent);border-radius:999px;padding:4px 14px;margin-bottom:10px}
+h1{font-size:30px}
+.sub{color:var(--mut);margin-top:6px;max-width:680px}
+.card{background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:18px;max-width:920px;width:100%}
+canvas{display:block;width:100%;height:auto;border-radius:10px;background:#fafcff;border:1px solid #e2e8f0}
+.controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center}
+button{border:none;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;background:#e2e8f0;color:#0f172a;transition:.15s}
+button:hover{filter:brightness(.96)}
+button.primary{background:var(--accent);color:#fff}
+button.danger{background:#fee2e2;color:#b91c1c}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;font-size:13px}
+.stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
+.stat b{color:var(--accent);font-size:15px}
+.hint{color:var(--mut);font-size:13px;margin-left:auto}
+.info{max-width:920px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
+.info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
+code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div class="badge">Deep Learning</div>
+  <h1>LSTM — Long Short-Term Memory</h1>
+  <p class="sub">เซลล์หน่วยความจำที่แก้ปัญหา vanishing gradient ของ RNN ด้วย <b>Forget / Input / Output Gate</b> ควบคุมการจำและการลืม</p>
+</header>
+<div class="card">
+  <canvas id="c" width="860" height="360"></canvas>
+  <div class="controls">
+    <button id="play" class="primary">▶ เล่น (ทีละ timestep)</button>
+    <button id="step">ขั้นถัดไป</button>
+    <button id="reset" class="danger">สุ่มน้ำหนักใหม่</button>
+    <span class="hint">ลำดับอินพุต: H → e → l → l → o → !</span>
+  </div>
+  <div class="stats">
+    <div class="stat">Timestep: <b id="t">0 / 6</b></div>
+    <div class="stat">อินพุตปัจจุบัน: <b id="x">—</b></div>
+    <div class="stat">‖h‖ (ขนาด hidden): <b id="hnorm">—</b></div>
+  </div>
+</div>
+<div class="card">
+  <canvas id="chart" width="860" height="130"></canvas>
+  <p style="font-size:12px;color:#64748b;margin-top:6px">ค่า hidden state h (เส้นทึบ) และ cell state c (เส้นประ) 4 มิติ ตามเวลา — สังเกตว่า LSTM เก็บข้อมูลได้ข้าม timestep</p>
+</div>
+<div class="info">
+  <h2>หลักการทำงาน</h2>
+  <p>LSTM มี <b>cell state c<sub>t</sub></b> เป็น "สายพาน" ข้อมูลที่ไหลผ่านยาว ๆ โดยมีประตู 3 บานควบคุม:<br>
+  <b>f</b> (forget) = ลืมข้อมูลเก่าเท่าไร, <b>i</b> (input) = รับข้อมูลใหม่เท่าไร, <b>o</b> (output) = ปล่อยข้อมูลออกเป็น hidden เท่าไร<br>
+  <code>c<sub>t</sub> = f ⊙ c<sub>t-1</sub> + i ⊙ g</code> และ <code>h<sub>t</sub> = o ⊙ tanh(c<sub>t</sub>)</code></p>
+</div>
+<script>
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+const chart=document.getElementById('chart'), cctx=chart.getContext('2d');
+const W=canvas.width,H=canvas.height;
+const $=id=>document.getElementById(id);
+const rand=(a,b)=>a+Math.random()*(b-a);
+const CHARS=['H','e','l','o','!'], D=CHARS.length, NH=4, DIN=D+NH;
+const seq=['H','e','l','l','o','!'];
+let Wf,Wi,Wg,Wo, bf,bi,bg,bo;
+let hPrev,cPrev, hNow,cNow, gateVals={}, stepIdx=0, playing=false, timer=null;
+const hist=[];
+
+function initWeights(){
+  const mk=()=>Array.from({length:NH},()=>Array.from({length:DIN},()=>rand(-0.6,0.6)));
+  const mb=()=>Array.from({length:NH},()=>rand(-0.2,0.2));
+  Wf=mk();Wi=mk();Wg=mk();Wo=mk();
+  bf=mb();bi=mb();bg=mb();bo=mb();
+  hPrev=new Array(NH).fill(0);
+  cPrev=new Array(NH).fill(0);
+  hNow=new Array(NH).fill(0);
+  cNow=new Array(NH).fill(0);
+  stepIdx=0;hist.length=0;
+  gateVals={f:new Array(NH).fill(0),i:new Array(NH).fill(0),g:new Array(NH).fill(0),o:new Array(NH).fill(0)};
+  stop();$('play').textContent='▶ เล่น (ทีละ timestep)';
+}
+const sig=t=>1/(1+Math.exp(-t));
+function oneHot(ch){const v=new Array(D).fill(0);v[CHARS.indexOf(ch)]=1;return v;}
+function compute(){
+  const x=oneHot(seq[stepIdx]);
+  const inp=[...hPrev,...x];
+  const gate=(W,b,act)=>W.map((row,i)=>act(row.reduce((s,v,j)=>s+v*inp[j],0)+b[i]));
+  gateVals.f=gate(Wf,bf,sig);
+  gateVals.i=gate(Wi,bi,sig);
+  gateVals.g=gate(Wg,bg,Math.tanh);
+  gateVals.o=gate(Wo,bo,sig);
+  cNow=gateVals.f.map((f,i)=>f*cPrev[i]+gateVals.i[i]*gateVals.g[i]);
+  hNow=gateVals.o.map((o,i)=>o*Math.tanh(cNow[i]));
+  hist.push({h:[...hNow],c:[...cNow]});
+  hPrev=[...hNow];cPrev=[...cNow];
+}
+
+// layout
+const BX=150,BW=150,BH=88; // gate boxes
+const gatePos={f:{x:BX,y:44},i:{x:BX,y:150},g:{x:BX,y:256},o:{x:BX+330,y:150}};
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // horizontal cell-state path
+  ctx.strokeStyle='#d1d5db';ctx.lineWidth=10;
+  ctx.beginPath();ctx.moveTo(30,202);ctx.lineTo(W-30,202);ctx.stroke();
+  ctx.strokeStyle='#16a34a';ctx.lineWidth=3;
+  ctx.setLineDash([2,4]);
+  ctx.beginPath();ctx.moveTo(30,202);ctx.lineTo(W-30,202);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#16a34a';ctx.font='bold 13px sans-serif';ctx.textAlign='left';
+  ctx.fillText('cₜ₋₁ →',60,190);
+  ctx.fillText('→ cₜ',W-160,190);
+
+  // gate boxes
+  for(const key of ['f','i','g','o']){
+    const p=gatePos[key];
+    ctx.fillStyle='#fff';ctx.strokeStyle='#16a34a';ctx.lineWidth=2;
+    ctx.beginPath();ctx.roundRect(p.x,p.y,BW,BH,10);ctx.fill();ctx.stroke();
+    const names={f:'Forget Gate (f)',i:'Input Gate (i)',g:'Candidate (g)',o:'Output Gate (o)'};
+    const acts={f:'σ',i:'σ',g:'tanh',o:'σ'};
+    ctx.fillStyle='#0f172a';ctx.font='bold 13px sans-serif';ctx.textAlign='center';
+    ctx.fillText(names[key],p.x+BW/2,p.y+18);
+    ctx.fillStyle='#16a34a';ctx.font='12px sans-serif';
+    ctx.fillText('act = '+acts[key],p.x+BW/2,p.y+34);
+    // value bars
+    const vals=gateVals[key];
+    for(let u=0;u<NH;u++){
+      const bx=p.x+12, by=p.y+42+u*11;
+      ctx.fillStyle='#f1f5f9';ctx.fillRect(bx,by,BW-24,7);
+      const v=vals[u];
+      const w=Math.min(BW-24,Math.abs(v)*(BW-24)/1.2);
+      ctx.fillStyle=v>=0?'#16a34a':'#dc2626';
+      ctx.fillRect(bx+(v<0?(BW-24-w):0),by,w,7);
+      ctx.fillStyle='#64748b';ctx.font='9px sans-serif';
+      ctx.fillText(v.toFixed(2),bx+BW-24+4,by+7);
+    }
+  }
+  // input box
+  const ix=430,iy=300;
+  ctx.fillStyle='#0f172a';
+  ctx.beginPath();ctx.roundRect(ix,iy,120,40,8);ctx.fill();
+  ctx.fillStyle='#fff';ctx.font='bold 15px sans-serif';ctx.textAlign='center';
+  ctx.fillText('x_t = '+seq[stepIdx],ix+60,iy+25);
+  // hPrev / hNow boxes
+  stateBox(30,44,'hₜ₋₁',hPrev,false);
+  stateBox(30,330,'cₜ₋₁',cPrev,true);
+  stateBox(W-190,44,'hₜ',hNow,false);
+  stateBox(W-190,330,'cₜ',cNow,true);
+  // multiply / add markers
+  ctx.fillStyle='#dc2626';ctx.font='bold 22px sans-serif';
+  ctx.fillText('×',gatePos.f.x+BW+26,124);
+  ctx.fillText('×',gatePos.o.x-40,124);
+  ctx.fillText('+',BX+BW+140,246);
+  ctx.fillStyle='#0f172a';ctx.font='13px sans-serif';
+  ctx.fillText('cₜ = f⊙cₜ₋₁ + i⊙g',260,320);
+  ctx.fillText('hₜ = o⊙tanh(cₜ)',540,120);
+
+  $('t').textContent=stepIdx+' / '+seq.length;
+  $('x').textContent=seq[stepIdx]||'จบ';
+  $('hnorm').textContent=hNow.reduce((s,v)=>s+v*v,0).toFixed(3);
+  drawChart();
+}
+function stateBox(x,y,label,vals,isC){
+  ctx.fillStyle='#fff';ctx.strokeStyle=isC?'#0d9488':'#0891b2';ctx.lineWidth=2;
+  ctx.beginPath();ctx.roundRect(x,y,150,BH,10);ctx.fill();ctx.stroke();
+  ctx.fillStyle='#0f172a';ctx.font='bold 13px sans-serif';ctx.textAlign='center';
+  ctx.fillText(label,x+75,y+18);
+  for(let u=0;u<NH;u++){
+    const bx=x+12, by=y+26+u*13;
+    ctx.fillStyle='#f1f5f9';ctx.fillRect(bx,by,126,9);
+    const v=vals[u];
+    const w=Math.min(126,Math.abs(v)*126/1.2);
+    ctx.fillStyle=v>=0?(isC?'#0d9488':'#0891b2'):'#dc2626';
+    ctx.fillRect(bx+(v<0?(126-w):0),by,w,9);
+  }
+}
+function drawChart(){
+  cctx.clearRect(0,0,chart.width,chart.height);
+  cctx.strokeStyle='#e2e8f0';cctx.lineWidth=1;
+  cctx.beginPath();cctx.moveTo(0,chart.height/2);cctx.lineTo(chart.width,chart.height/2);cctx.stroke();
+  if(hist.length<2)return;
+  const colors=['#ef4444','#3b82f6','#10b981','#f59e0b'];
+  for(let u=0;u<NH;u++){
+    cctx.strokeStyle=colors[u];cctx.lineWidth=2;cctx.beginPath();
+    hist.forEach((h,i)=>{
+      const x=i*(chart.width-20)/(seq.length-1)+10;
+      const y=chart.height/2-h.h[u]*(chart.height/2-12);
+      i===0?cctx.moveTo(x,y):cctx.lineTo(x,y);
+    });
+    cctx.stroke();
+    cctx.strokeStyle='rgba('+[100,116,139].join(',')+',0.6)';cctx.setLineDash([3,3]);cctx.lineWidth=1;cctx.beginPath();
+    hist.forEach((h,i)=>{
+      const x=i*(chart.width-20)/(seq.length-1)+10;
+      const y=chart.height/2-h.c[u]*(chart.height/2-12);
+      i===0?cctx.moveTo(x,y):cctx.lineTo(x,y);
+    });
+    cctx.stroke();cctx.setLineDash([]);
+  }
+  cctx.fillStyle='#64748b';cctx.font='10px sans-serif';cctx.textAlign='center';
+  for(let i=0;i<seq.length;i++){
+    cctx.fillText(seq[i],10+i*(chart.width-20)/(seq.length-1),chart.height-6);
+  }
+}
+function doStep(){
+  if(stepIdx>=seq.length)return;
+  compute();
+  stepIdx++;
+  draw();
+  if(stepIdx>=seq.length){clearTimer();playing=false;$('play').textContent='▶ เล่น (ทีละ timestep)';}
+}
+function clearTimer(){if(timer){clearInterval(timer);timer=null;}}
+function stop(){playing=false;clearTimer();}
+$('play').onclick=()=>{
+  if(playing){stop();$('play').textContent='▶ เล่น (ทีละ timestep)';return;}
+  if(stepIdx>=seq.length)return;
+  playing=true;$('play').textContent='⏸ หยุด';
+  timer=setInterval(doStep,900);
+};
+$('step').onclick=()=>{stop();$('play').textContent='▶ เล่น (ทีละ timestep)';doStep();};
+$('reset').onclick=()=>{initWeights();draw();};
+
+initWeights();draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLP (Neural Network) — ML Visualizer</title>
+<style>
+:root{--accent:#0891b2;--bg:#f1f5f9;--card:#fff;--ink:#0f172a;--mut:#64748b;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;align-items:center;padding:28px 16px;gap:20px}
+header{text-align:center}
+.badge{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--accent);border-radius:999px;padding:4px 14px;margin-bottom:10px}
+h1{font-size:30px}
+.sub{color:var(--mut);margin-top:6px;max-width:680px}
+.card{background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:18px;max-width:880px;width:100%}
+canvas{display:block;width:100%;height:auto;border-radius:10px;background:#fafcff;border:1px solid #e2e8f0}
+.controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center}
+button{border:none;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;background:#e2e8f0;color:#0f172a;transition:.15s}
+button:hover{filter:brightness(.96)}
+button.primary{background:var(--accent);color:#fff}
+button.danger{background:#fee2e2;color:#b91c1c}
+button.pat{background:#fff;border:2px solid #cbd5e1}
+button.pat.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;font-size:13px}
+.stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
+.stat b{color:var(--accent);font-size:15px}
+.hint{color:var(--mut);font-size:13px;margin-left:auto}
+.info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
+.info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
+code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div class="badge">Supervised Learning</div>
+  <h1>MLP — Multi-Layer Perceptron</h1>
+  <p class="sub">โครงข่ายประสาทเทียม <b>2-4-1</b> เรียนรู้ฟังก์ชัน <b>XOR</b> ด้วย <b>Backpropagation</b> (เส้นหนา = น้ำหนักมาก สีแดง = ลบ สีน้ำเงิน = บวก)</p>
+</header>
+<div class="card">
+  <canvas id="c" width="640" height="340"></canvas>
+  <div class="controls">
+    <button id="train" class="primary">▶ ฝึก (Backprop)</button>
+    <button id="resetW" class="danger">สุ่มน้ำหนักใหม่</button>
+    <button id="p00" class="pat active">(0,0)</button>
+    <button id="p01" class="pat">(0,1)</button>
+    <button id="p10" class="pat">(1,0)</button>
+    <button id="p11" class="pat">(1,1)</button>
+    <span class="hint">💡 คลิกที่ปุ่มอินพุต หรือคลิกที่วงกลมอินพุตเพื่อทดสอบ forward pass</span>
+  </div>
+  <div class="stats">
+    <div class="stat">Epoch: <b id="ep">0</b></div>
+    <div class="stat">Loss: <b id="loss">—</b></div>
+    <div class="stat">อินพุต: <b id="inp">(0, 0)</b></div>
+    <div class="stat">ผลทำนาย: <b id="out">—</b></div>
+    <div class="stat">คำตอบจริง: <b id="true">0</b></div>
+  </div>
+</div>
+<div class="info">
+  <h2>หลักการทำงาน</h2>
+  <p>MLP ประกอบด้วยชั้น <b>Input → Hidden (sigmoid) → Output (sigmoid)</b> ค่าจะไหลไปข้างหน้า (Forward Propagation) คำนวณ error แล้วส่งย้อนกลับ (Backpropagation) เพื่อปรับน้ำหนักด้วยกฎลูกโซ่ (Chain Rule) ทำซ้ำจนโมเดลจำลอง XOR ได้ ฟังก์ชัน XOR ไม่สามารถเรียนรู้ได้ด้วยเส้นตรงเส้นเดียว (Perceptron เดี่ยว) จึงต้องมี hidden layer</p>
+</div>
+<script>
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+const $=id=>document.getElementById(id);
+const rand=(a,b)=>a+Math.random()*(b-a);
+const patterns=[[0,0,0],[0,1,1],[1,0,1],[1,1,0]];
+let W1,b1,W2,b2, sel=[0,0], running=false, raf=null, epoch=0, lr=0.6;
+const lossHist=[];
+
+function initW(){
+  W1=Array.from({length:4},()=>[rand(-1,1),rand(-1,1)]);
+  b1=[rand(-1,1),rand(-1,1),rand(-1,1),rand(-1,1)];
+  W2=Array.from({length:4},()=>rand(-1,1));
+  b2=rand(-1,1);
+  epoch=0;lossHist.length=0;stop();$('train').textContent='▶ ฝึก (Backprop)';
+}
+const sig=t=>1/(1+Math.exp(-t));
+function forward(x){
+  const h=W1.map((row,i)=>sig(row[0]*x[0]+row[1]*x[1]+b1[i]));
+  const o=sig(W2.reduce((s,w,i)=>s+w*h[i],0)+b2);
+  return {h,o};
+}
+function mseLoss(){
+  let s=0;
+  for(const [a,b,t] of patterns){const o=forward([a,b]).o;s+=(o-t)**2;}
+  return s/4;
+}
+function trainEpoch(){
+  for(const [a,b,t] of patterns){
+    const {h,o}=forward([a,b]);
+    const e=o-t;
+    const dO=e*o*(1-o);
+    for(let i=0;i<4;i++){W2[i]-=lr*dO*h[i];}
+    b2-=lr*dO;
+    for(let i=0;i<4;i++){
+      const dh=dO*W2[i]*h[i]*(1-h[i]);
+      W1[i][0]-=lr*dh*a;W1[i][1]-=lr*dh*b;b1[i]-=lr*dh;
+    }
+  }
+  epoch++;
+}
+
+// layout
+const nX=[90,90], nHx=320, nOx=505;
+const nY=[110,230], nHy=[40,120,200,280], nOy=170;
+const RX=24,RH=22,RO=28;
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // edges W1
+  for(let i=0;i<4;i++){
+    for(let j=0;j<2;j++){
+      edge(nX[j],nY[j],nHx,nHy[i],W1[i][j]);
+    }
+  }
+  // edges W2
+  for(let i=0;i<4;i++){
+    edge(nHx,nHy[i],nOx,nOy,W2[i]);
+  }
+  // hidden nodes
+  const {h,o}=forward(sel);
+  for(let i=0;i<4;i++){
+    node(nHx,nHy[i],RH,h[i],'h'+i);
+  }
+  // inputs
+  for(let j=0;j<2;j++){
+    const c=nX[j],y=nY[j];
+    ctx.beginPath();ctx.arc(c,y,RX,0,Math.PI*2);
+    ctx.fillStyle=sel[j]===1?'#0f172a':'#e2e8f0';ctx.fill();
+    ctx.strokeStyle='#94a3b8';ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle=sel[j]===1?'#fff':'#64748b';ctx.font='bold 15px sans-serif';ctx.textAlign='center';
+    ctx.fillText('x'+j,c,y+5);
+    ctx.fillStyle='#64748b';ctx.font='12px sans-serif';
+    ctx.fillText('= '+sel[j],c,y+RX+16);
+  }
+  // output node
+  node(nOx,nOy,RO,o,'out');
+  ctx.fillStyle='#64748b';ctx.font='12px sans-serif';ctx.textAlign='center';
+  ctx.fillText('y ̂',nOx,nOy+RO+20);
+
+  // loss chart inset
+  if(lossHist.length>2){
+    const iw=200, ih=70, ix=W-iw-14, iy=12;
+    ctx.fillStyle='rgba(255,255,255,.93)';ctx.strokeStyle='#e2e8f0';
+    ctx.beginPath();ctx.roundRect(ix,iy,iw,ih,8);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#64748b';ctx.font='10px sans-serif';ctx.textAlign='left';
+    ctx.fillText('Loss (MSE) — 4 รูปแบบ XOR',ix+8,iy+13);
+    const max=Math.max(...lossHist), min=Math.min(...lossHist);
+    const rng=Math.max(max-min,1e-9);
+    ctx.strokeStyle='#f43f5e';ctx.lineWidth=1.8;ctx.beginPath();
+    lossHist.forEach((v,i)=>{
+      const x=ix+8+(iw-16)*i/(lossHist.length-1);
+      const y=iy+ih-9-(ih-22)*(v-min)/rng;
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  }
+  $('ep').textContent=epoch;
+  $('loss').textContent=mseLoss().toFixed(5);
+  $('inp').textContent='('+sel[0]+', '+sel[1]+')';
+  $('out').textContent=o.toFixed(3);
+  $('true').textContent=(sel[0]^sel[1]);
+}
+function edge(x1,y1,x2,y2,w){
+  const a=Math.min(1,Math.abs(w));
+  ctx.strokeStyle=w<0?'rgba(239,68,68,'+a.toFixed(2)+')':'rgba(59,130,246,'+a.toFixed(2)+')';
+  ctx.lineWidth=Math.max(0.5,Math.abs(w)*4);
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+}
+function node(x,y,r,val,label){
+  ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);
+  const v=Math.max(0,Math.min(1,val));
+  ctx.fillStyle='rgb('+Math.round(15+(248-15)*v)+','+Math.round(23+(250-23)*v)+','+Math.round(42+(251-42)*v)+')';
+  ctx.fill();
+  ctx.strokeStyle=label==='out'?'#0891b2':'#cbd5e1';ctx.lineWidth=label==='out'?3:2;ctx.stroke();
+  ctx.fillStyle=val>0.5?'#fff':'#0f172a';ctx.font='bold 12px sans-serif';ctx.textAlign='center';
+  ctx.fillText(val.toFixed(2),x,y+4);
+}
+
+function loop(){
+  if(!running)return;
+  for(let i=0;i<80;i++)trainEpoch();
+  lossHist.push(mseLoss());
+  if(mseLoss()<0.0005||epoch>60000){stop();$('train').textContent='▶ ฝึก (Backprop)';}
+  draw();
+  raf=requestAnimationFrame(loop);
+}
+function start(){running=true;$('train').textContent='⏸ หยุด';if(raf)cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
+function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=null;}
+
+$('train').onclick=()=>{running?stop():start();};
+$('resetW').onclick=()=>{initW();draw();};
+$('p00').onclick=()=>setSel(0,0,$('p00'));
+$('p01').onclick=()=>setSel(0,1,$('p01'));
+$('p10').onclick=()=>setSel(1,0,$('p10'));
+$('p11').onclick=()=>setSel(1,1,$('p11'));
+function setSel(a,b,btn){
+  sel=[a,b];
+  for(const id of ['p00','p01','p10','p11'])document.getElementById(id).classList.remove('active');
+  btn.classList.add('active');
+  draw();
+}
+canvas.addEventListener('click',e=>{
+  const r=canvas.getBoundingClientRect();
+  const cx=(e.clientX-r.left)*(W/r.width), cy=(e.clientY-r.top)*(H/r.height);
+  for(let j=0;j<2;j++){
+    if(Math.hypot(cx-nX[j],cy-nY[j])<RX+6){
+      sel[j]=sel[j]===0?1:0;
+      const key=sel[0]+''+sel[1];
+      const btn={ '00':'p00','01':'p01','10':'p10','11':'p11' }[key];
+      for(const id of ['p00','p01','p10','p11'])document.getElementById(id).classList.remove('active');
+      document.getElementById(btn).classList.add('active');
+      draw();
+    }
+  }
+});
+
+initW();draw();
+</script>
+</body>
+</html>

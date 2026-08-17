@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SVM (Support Vector Machine) — ML Visualizer</title>
+<style>
+:root{--accent:#dc2626;--bg:#f1f5f9;--card:#fff;--ink:#0f172a;--mut:#64748b;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;align-items:center;padding:28px 16px;gap:20px}
+header{text-align:center}
+.badge{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--accent);border-radius:999px;padding:4px 14px;margin-bottom:10px}
+h1{font-size:30px}
+.sub{color:var(--mut);margin-top:6px;max-width:680px}
+.card{background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:18px;max-width:880px;width:100%}
+canvas{display:block;width:100%;height:auto;border-radius:10px;background:#fafcff;border:1px solid #e2e8f0}
+.controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center}
+button{border:none;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;background:#e2e8f0;color:#0f172a;transition:.15s}
+button:hover{filter:brightness(.96)}
+button.primary{background:var(--accent);color:#fff}
+button.danger{background:#fee2e2;color:#b91c1c}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;font-size:13px}
+.stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
+.stat b{color:var(--accent);font-size:15px}
+.hint{color:var(--mut);font-size:13px;margin-left:auto}
+.info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
+.info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
+code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div class="badge">Supervised Learning</div>
+  <h1>SVM (Support Vector Machine)</h1>
+  <p class="sub">หาเส้นแบ่งคลาสที่ทำให้ <b>Margin (ระยะห่างระหว่างเส้นแบ่งกับข้อมูล)</b> มากที่สุด จุดที่กำหนดเส้นคือ <b>Support Vectors</b></p>
+</header>
+<div class="card">
+  <canvas id="c" width="820" height="460"></canvas>
+  <div class="controls">
+    <button id="rand" class="primary">สุ่มข้อมูล</button>
+    <button id="train">เริ่มฝึก (Hinge Loss)</button>
+    <button id="clear" class="danger">ล้าง</button>
+    <span class="hint">💡 คลิกเพิ่มจุด • กดปุ่ม C เพื่อสลับคลาสที่เพิ่ม</span>
+  </div>
+  <div class="stats">
+    <div class="stat">Support Vectors: <b id="sv">0</b></div>
+    <div class="stat">ความกว้าง Margin: <b id="margin">—</b></div>
+    <div class="stat">‖w‖: <b id="wnorm">—</b></div>
+    <div class="stat">Accuracy: <b id="acc">—</b></div>
+  </div>
+</div>
+<div class="info">
+  <h2>หลักการทำงาน</h2>
+  <p>SVM หาไฮเปอร์เพลน <code>w·x + b = 0</code> ที่แยกคลาสได้และมี <b>margin = 2/‖w‖</b> มากที่สุด โดยใช้ Loss แบบ <b>Hinge Loss</b> <code>max(0, 1 − y(w·x+b))</code> จุดที่อยู่บนขอบ margin (y·f ≤ 1) เรียกว่า Support Vectors ซึ่งเป็นจุดที่กำหนดตำแหน่งของเส้นแบ่งทั้งหมด</p>
+</div>
+<script>
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+const L=58,R=20,T=26,B=46;
+const $=id=>document.getElementById(id);
+const rand=(a,b)=>a+Math.random()*(b-a);
+const C0=[239,68,68], C1=[59,130,246];
+let pts=[], w1=1, w2=1, b=0, running=false, raf=null, steps=0, selClass=0;
+
+function genData(n){
+  pts=[];
+  for(let i=0;i<n;i++){
+    const c=Math.random()<0.5?0:1;
+    let x,y;
+    if(c===0){x=rand(0.05,0.48);y=rand(0.05,0.48);}
+    else{x=rand(0.52,0.95);y=rand(0.52,0.95);}
+    pts.push({x,y,c});
+  }
+  resetParams();
+}
+function resetParams(){w1=1;w2=1;b=0;steps=0;stop();$('train').textContent='เริ่มฝึก (Hinge Loss)';}
+function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
+function inv(c){return {x:(c.x-L)/(W-L-R), y:1-(c.y-T)/(H-T-B)}}
+const f=(p)=>w1*p.x+w2*p.y+b;
+function sgdStep(){
+  const lr=0.05, C=6;
+  if(!pts.length)return;
+  const p=pts[Math.floor(Math.random()*pts.length)];
+  const y=p.c===1?1:-1;
+  const v=y*f(p);
+  if(v<1){w1+=lr*(C*y*p.x-w1);w2+=lr*(C*y*p.y-w2);b+=lr*C*y;}
+  else{w1-=lr*w1;w2-=lr*w2;}
+  steps++;
+}
+function accuracy(){
+  if(!pts.length)return 0;
+  let ok=0;
+  for(const p of pts)if((f(p)>=0?1:0)===p.c)ok++;
+  return ok/pts.length*100;
+}
+function svCount(){
+  let n=0;
+  for(const p of pts){const y=p.c===1?1:-1;if(y*f(p)<=1)n++;}
+  return n;
+}
+
+function lineY(x,val){
+  if(Math.abs(w2)<1e-9)return null;
+  return (val-b-w1*x)/w2;
+}
+function drawLine(val,style,wid,dash){
+  ctx.strokeStyle=style;ctx.lineWidth=wid;
+  if(dash)ctx.setLineDash(dash);
+  const p1=px({x:0,y:lineY(0,val)}), p2=px({x:1,y:lineY(1,val)});
+  if(p1.y>-200&&p1.y<H+200&&p2.y>-200&&p2.y<H+200){
+    ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke();
+  }
+  if(dash)ctx.setLineDash([]);
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // grid + labels
+  ctx.lineWidth=1;ctx.strokeStyle='#e8eef5';
+  for(let i=0;i<=10;i++){
+    const gx=L+(W-L-R)*i/10;ctx.beginPath();ctx.moveTo(gx,T);ctx.lineTo(gx,H-B);ctx.stroke();
+    const gy=T+(H-T-B)*i/10;ctx.beginPath();ctx.moveTo(L,gy);ctx.lineTo(W-R,gy);ctx.stroke();
+  }
+  ctx.fillStyle='#94a3b8';ctx.font='11px sans-serif';ctx.textAlign='center';
+  ctx.fillText('x',W/2,H-8);
+  ctx.save();ctx.translate(14,H/2);ctx.rotate(-Math.PI/2);ctx.fillText('y',0,0);ctx.restore();
+  for(let i=0;i<=10;i+=2)ctx.fillText((i/10).toFixed(1),L+(W-L-R)*i/10,H-B+16);
+  ctx.textAlign='right';
+  for(let i=0;i<=10;i+=2)ctx.fillText((i/10).toFixed(1),L-8,T+(H-T-B)*(1-i/10)+3);
+  // margin region shading
+  if(Math.abs(w2)>1e-9){
+    const a=px({x:0,y:lineY(0,1)}), d=px({x:0,y:lineY(0,-1)});
+    const c=px({x:1,y:lineY(1,1)}), e=px({x:1,y:lineY(1,-1)});
+    ctx.fillStyle='rgba(220,38,38,.07)';
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(d.x,d.y);ctx.lineTo(e.x,e.y);ctx.lineTo(c.x,c.y);ctx.closePath();ctx.fill();
+  }
+  // margin lines
+  drawLine(-1,'rgba(220,38,38,.5)',1.5,[6,4]);
+  drawLine(1,'rgba(220,38,38,.5)',1.5,[6,4]);
+  // decision boundary
+  drawLine(0,'#0f172a',3,null);
+  // points
+  for(const p of pts){
+    const c=px(p), col=p.c===0?C0:C1;
+    const y=p.c===1?1:-1;
+    const isSV=y*f(p)<=1;
+    ctx.beginPath();ctx.arc(c.x,c.y,isSV?8:5.5,0,Math.PI*2);
+    ctx.fillStyle='rgb('+col.join(',')+')';ctx.fill();
+    ctx.lineWidth=isSV?2.5:1.2;
+    ctx.strokeStyle=isSV?'#0f172a':'rgba(0,0,0,.3)';
+    ctx.stroke();
+    if(isSV){ctx.beginPath();ctx.arc(c.x,c.y,11,0,Math.PI*2);ctx.strokeStyle='rgba(15,23,42,.5)';ctx.lineWidth=1.5;ctx.stroke();}
+  }
+  const nw=Math.hypot(w1,w2);
+  $('sv').textContent=svCount();
+  $('margin').textContent=nw>1e-9?(2/nw).toFixed(3):'—';
+  $('wnorm').textContent=nw.toFixed(3);
+  $('acc').textContent=pts.length?accuracy().toFixed(1)+'%':'—';
+}
+
+function loop(){
+  if(!running)return;
+  for(let i=0;i<250;i++)sgdStep();
+  if(steps>30000){stop();$('train').textContent='เริ่มฝึก (Hinge Loss)';}
+  draw();
+  raf=requestAnimationFrame(loop);
+}
+function start(){if(!pts.length)return;running=true;$('train').textContent='⏸ หยุด';if(raf)cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
+function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=null;}
+
+$('rand').onclick=()=>{genData(36);draw();};
+$('train').onclick=()=>{if(running){stop();$('train').textContent='เริ่มฝึก (Hinge Loss)';}else{resetParams();start();}};
+$('clear').onclick=()=>{pts=[];resetParams();draw();};
+
+canvas.addEventListener('click',e=>{
+  const r=canvas.getBoundingClientRect();
+  const c=inv({x:(e.clientX-r.left)*(W/r.width),y:(e.clientY-r.top)*(H/r.height)});
+  if(c.x<0.02||c.x>0.98||c.y<0.02||c.y>0.98)return;
+  pts.push({x:Math.max(0,Math.min(1,c.x)),y:Math.max(0,Math.min(1,c.y)),c:selClass});
+  draw();
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='c'||e.key==='C'){selClass=selClass===0?1:0;}
+});
+
+genData(36);draw();
+</script>
+</body>
+</html>

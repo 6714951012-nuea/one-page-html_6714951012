@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Logistic Regression — ML Visualizer</title>
+<style>
+:root{--accent:#7c3aed;--bg:#f1f5f9;--card:#fff;--ink:#0f172a;--mut:#64748b;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;align-items:center;padding:28px 16px;gap:20px}
+header{text-align:center}
+.badge{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--accent);border-radius:999px;padding:4px 14px;margin-bottom:10px}
+h1{font-size:30px}
+.sub{color:var(--mut);margin-top:6px;max-width:680px}
+.card{background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:18px;max-width:880px;width:100%}
+canvas{display:block;width:100%;height:auto;border-radius:10px;background:#fafcff;border:1px solid #e2e8f0}
+.controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center}
+button{border:none;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;background:#e2e8f0;color:#0f172a;transition:.15s}
+button:hover{filter:brightness(.96)}
+button.primary{background:var(--accent);color:#fff}
+button.danger{background:#fee2e2;color:#b91c1c}
+button.activeCls{border:3px solid #0f172a}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;font-size:13px}
+.stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
+.stat b{color:var(--accent);font-size:15px}
+.hint{color:var(--mut);font-size:13px;margin-left:auto}
+.info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
+.info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
+code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div class="badge">Supervised Learning</div>
+  <h1>Logistic Regression</h1>
+  <p class="sub">จำแนกข้อมูล 2 คลาส ด้วยฟังก์ชัน <b>Sigmoid σ(z) = 1/(1+e<sup>-z</sup>)</b> และเส้นแบ่ง (Decision Boundary) ที่เรียนรู้จาก Gradient Descent</p>
+</header>
+<div class="card">
+  <canvas id="c" width="820" height="460"></canvas>
+  <div class="controls">
+    <button id="rand" class="primary">สุ่มข้อมูล</button>
+    <button id="train">เริ่มฝึก (Gradient Descent)</button>
+    <button id="clear" class="danger">ล้างทั้งหมด</button>
+    <button id="cls0" class="activeCls" style="background:#fee2e2;color:#b91c1c">เพิ่ม Class 0 (แดง)</button>
+    <button id="cls1" style="background:#dbeafe;color:#1d4ed8">เพิ่ม Class 1 (น้ำเงิน)</button>
+    <span class="hint">💡 คลิกบนกราฟเพื่อเพิ่มจุด</span>
+  </div>
+  <div class="stats">
+    <div class="stat">Loss: <b id="loss">—</b></div>
+    <div class="stat">Accuracy: <b id="acc">—</b></div>
+    <div class="stat">ขั้นตอน (epoch): <b id="ep">0</b></div>
+  </div>
+</div>
+<div class="info">
+  <h2>หลักการทำงาน</h2>
+  <p>แทนที่ค่า <code>z = w₀ + w₁x + w₂y</code> ผ่าน Sigmoid จะได้ความน่าจะเป็น <code>P(class=1)</code> ระหว่าง 0–1 จุดที่ <code>P = 0.5</code> คือเส้นแบ่งคลาส Gradient Descent ปรับน้ำหนัก <code>w</code> เพื่อลด Cross-Entropy Loss พื้นหลังสีแดง/น้ำเงินแสดงความน่าจะเป็นที่โมเดลทำนาย</p>
+</div>
+<script>
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+const L=58,R=20,T=26,B=46;
+const $=id=>document.getElementById(id);
+const rand=(a,b)=>a+Math.random()*(b-a);
+const C0=[239,68,68], C1=[59,130,246];
+let points=[], w=[0,0,0], running=false, raf=null, epochs=0, selClass=0;
+const lossHist=[];
+
+function genData(n){
+  points=[];
+  for(let i=0;i<n;i++){
+    const c=Math.random()<0.5?0:1;
+    let x,y;
+    if(c===0){x=rand(0.05,0.5);y=rand(0.05,0.5);}
+    else{x=rand(0.5,0.95);y=rand(0.5,0.95);}
+    points.push({x,y,c});
+  }
+  resetParams();
+}
+function resetParams(){w=[0,0,0];epochs=0;lossHist.length=0;stop();$('train').textContent='เริ่มฝึก (Gradient Descent)';}
+function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
+function inv(c){return {x:(c.x-L)/(W-L-R), y:1-(c.y-T)/(H-T-B)}}
+const sig=t=>1/(1+Math.exp(-t));
+const predict=p=>sig(w[0]+w[1]*p.x+w[2]*p.y);
+
+function logLoss(){
+  let s=0;
+  for(const p of points){
+    const y=predict(p);
+    s+=-(p.c*Math.log(y+1e-9)+(1-p.c)*Math.log(1-y+1e-9));
+  }
+  return points.length?s/points.length:0;
+}
+function accuracy(){
+  if(!points.length)return 0;
+  let ok=0;
+  for(const p of points)if((predict(p)>=0.5?1:0)===p.c)ok++;
+  return ok/points.length*100;
+}
+function sgdStep(){
+  const lr=0.8;
+  for(const p of points){
+    const pr=predict(p), e=pr-p.c;
+    w[0]-=lr*e; w[1]-=lr*e*p.x; w[2]-=lr*e*p.y;
+  }
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // probability heatmap
+  const step=24;
+  for(let gy=0;gy<H-B-T;gy+=step){
+    for(let gx=0;gx<W-L-R;gx+=step){
+      const p={x:(gx+step/2)/(W-L-R), y:1-(gy+step/2)/(H-T-B)};
+      const pr=predict(p);
+      const r=Math.round(C0[0]+(C1[0]-C0[0])*pr), g=Math.round(C0[1]+(C1[1]-C0[1])*pr), bl=Math.round(C0[2]+(C1[2]-C0[2])*pr);
+      ctx.fillStyle='rgba('+r+','+g+','+bl+',0.28)';
+      ctx.fillRect(L+gx,T+gy,step+1,step+1);
+    }
+  }
+  // grid + labels
+  ctx.lineWidth=1;ctx.strokeStyle='#e8eef5';
+  for(let i=0;i<=10;i++){
+    const gx=L+(W-L-R)*i/10;ctx.beginPath();ctx.moveTo(gx,T);ctx.lineTo(gx,H-B);ctx.stroke();
+    const gy=T+(H-T-B)*i/10;ctx.beginPath();ctx.moveTo(L,gy);ctx.lineTo(W-R,gy);ctx.stroke();
+  }
+  ctx.fillStyle='#94a3b8';ctx.font='11px sans-serif';ctx.textAlign='center';
+  for(let i=0;i<=10;i+=2)ctx.fillText((i/10).toFixed(1),L+(W-L-R)*i/10,H-B+16);
+  ctx.textAlign='right';
+  for(let i=0;i<=10;i+=2)ctx.fillText((i/10).toFixed(1),L-8,T+(H-T-B)*(1-i/10)+3);
+
+  // decision boundary w0+w1*x+w2*y = 0
+  if(Math.abs(w[2])>1e-9){
+    const yAt0=-(w[0])/w[2], yAt1=-(w[0]+w[1])/w[2];
+    ctx.strokeStyle='#0f172a';ctx.lineWidth=3;
+    ctx.shadowColor='rgba(15,23,42,.3)';ctx.shadowBlur=6;
+    ctx.beginPath();ctx.moveTo(px({x:0,y:yAt0}).x,px({x:0,y:yAt0}).y);
+    ctx.lineTo(px({x:1,y:yAt1}).x,px({x:1,y:yAt1}).y);ctx.stroke();
+    ctx.shadowBlur=0;
+  }
+  // points
+  for(const p of points){
+    const c=px(p), col=p.c===0?C0:C1;
+    const mis=(predict(p)>=0.5?1:0)!==p.c;
+    ctx.beginPath();ctx.arc(c.x,c.y,6,0,Math.PI*2);
+    ctx.fillStyle='rgb('+col.join(',')+')';ctx.fill();
+    ctx.lineWidth=mis?3:1.5;ctx.strokeStyle=mis?'#0f172a':'rgba(0,0,0,.3)';ctx.stroke();
+  }
+  $('loss').textContent=points.length?logLoss().toFixed(4):'—';
+  $('acc').textContent=points.length?accuracy().toFixed(1)+'%':'—';
+  $('ep').textContent=epochs;
+}
+
+function loop(){
+  if(!running)return;
+  for(let i=0;i<6;i++){sgdStep();epochs++;}
+  lossHist.push(logLoss());
+  if(logLoss()<0.11||epochs>3000){stop();$('train').textContent='เริ่มฝึก (Gradient Descent)';}
+  draw();
+  raf=requestAnimationFrame(loop);
+}
+function start(){if(!points.length)return;running=true;$('train').textContent='⏸ หยุด';if(raf)cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
+function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=null;}
+
+$('rand').onclick=()=>{genData(40);draw();};
+$('train').onclick=()=>{if(running){stop();$('train').textContent='เริ่มฝึก (Gradient Descent)';}else{resetParams();start();}};
+$('clear').onclick=()=>{points=[];resetParams();draw();};
+$('cls0').onclick=()=>{selClass=0;$('cls0').classList.add('activeCls');$('cls1').classList.remove('activeCls');};
+$('cls1').onclick=()=>{selClass=1;$('cls1').classList.add('activeCls');$('cls0').classList.remove('activeCls');};
+
+canvas.addEventListener('click',e=>{
+  const r=canvas.getBoundingClientRect();
+  const c=inv({x:(e.clientX-r.left)*(W/r.width),y:(e.clientY-r.top)*(H/r.height)});
+  if(c.x<0.02||c.x>0.98||c.y<0.02||c.y>0.98)return;
+  points.push({x:Math.max(0,Math.min(1,c.x)),y:Math.max(0,Math.min(1,c.y)),c:selClass});
+  draw();
+});
+
+genData(40);draw();
+</script>
+</body>
+</html>

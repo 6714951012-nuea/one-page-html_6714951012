@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transformer — ML Visualizer</title>
+<style>
+:root{--accent:#e11d48;--bg:#f1f5f9;--card:#fff;--ink:#0f172a;--mut:#64748b;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;align-items:center;padding:28px 16px;gap:20px}
+header{text-align:center}
+.badge{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--accent);border-radius:999px;padding:4px 14px;margin-bottom:10px}
+h1{font-size:30px}
+.sub{color:var(--mut);margin-top:6px;max-width:680px}
+.card{background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:18px;max-width:920px;width:100%}
+.layout{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start}
+canvas{display:block;border-radius:10px;background:#fafcff;border:1px solid #e2e8f0}
+.side{flex:1;min-width:280px;display:flex;flex-direction:column;gap:12px}
+.side .box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;font-size:13.5px;line-height:1.6}
+.side .box b{color:var(--accent)}
+.barwrap{height:16px;background:#f1f5f9;border-radius:6px;overflow:hidden;position:relative;margin:3px 0}
+.bar{height:100%;background:linear-gradient(90deg,#fb7185,#e11d48);border-radius:6px}
+.tokchip{display:inline-block;background:#ffe4e6;color:#9f1239;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;margin:2px}
+.controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;align-items:center}
+button{border:none;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;background:#e2e8f0;color:#0f172a;transition:.15s}
+button:hover{filter:brightness(.96)}
+button.primary{background:var(--accent);color:#fff}
+button.danger{background:#fee2e2;color:#b91c1c}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;font-size:13px}
+.stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
+.stat b{color:var(--accent);font-size:15px}
+.info{max-width:920px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
+.info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
+code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div class="badge">Deep Learning</div>
+  <h1>Transformer — Self-Attention</h1>
+  <p class="sub">หัวใจของ ChatGPT / BERT: <b>Attention(Q,K,V) = softmax(QK<sup>T</sup>/√d<sub>k</sub>) V</b> — แต่ละคำ "มอง" คำอื่นในประโยคเพื่อเก็บบริบท</p>
+</header>
+<div class="card">
+  <div class="layout">
+    <canvas id="c" width="440" height="440"></canvas>
+    <div class="side">
+      <div class="box">
+        <b>ขั้นตอนสำหรับ token ที่กำลังประมวลผล:</b><br>
+        1. คำนวณ <b>Q·K<sup>T</sup>/√d<sub>k</sub></b> (score) กับทุกคำ<br>
+        2. ผ่าน <b>Softmax</b> → ความสนใจรวมกัน = 1<br>
+        3. นำ <b>V</b> มาถ่วงน้ำหนักรวมกัน → ผลลัพธ์
+      </div>
+      <div class="box">
+        <div style="font-weight:700;margin-bottom:6px">🔍 คะแนนดิบ (ก่อน softmax) ของแถวนี้</div>
+        <div id="scores"></div>
+      </div>
+      <div class="box">
+        <div style="font-weight:700;margin-bottom:6px">🎯 น้ำหนัก attention หลัง softmax (รวม = 1.00)</div>
+        <div id="probs"></div>
+      </div>
+      <div class="box">
+        <div style="font-weight:700;margin-bottom:6px">📦 ผลลัพธ์ O<sub>i</sub> (v₁..v₄)</div>
+        <div id="out">—</div>
+      </div>
+    </div>
+  </div>
+  <div class="controls">
+    <button id="play" class="primary">▶ เล่น</button>
+    <button id="step">ขั้นถัดไป</button>
+    <button id="reset" class="danger">รีเซ็ต</button>
+    <button id="s1">แมว นั่ง บน เสื่อ</button>
+    <button id="s2">AI เรียน รู้ ภาษา</button>
+    <button id="s3">ฉัน รัก การ เรียนรู้</button>
+  </div>
+  <div class="stats">
+    <div class="stat">token ที่กำลังประมวลผล: <b id="cur">—</b></div>
+    <div class="stat">d<sub>model</sub> = <b>8</b></div>
+  </div>
+</div>
+<div class="info">
+  <h2>หลักการทำงาน</h2>
+  <p>คำแต่ละคำถูกแปลงเป็นเวกเตอร์ (embedding) แล้วคูณเมทริกซ์น้ำหนัก <b>W<sub>Q</sub>, W<sub>K</sub>, W<sub>V</sub></b> ได้ <b>Query, Key, Value</b> ความสนใจระหว่างคำ i กับ j คำนวณจาก <code>Q<sub>i</sub>·K<sub>j</sub>/√d<sub>k</sub></code> ผ่าน softmax ให้เป็นน้ำหนัก 0–1 ที่รวมกันได้ 1 แล้วนำ Value มาถ่วงน้ำหนัก สีเข้มในตาราง = คำนั้นให้ความสำคัญกับอีกคำมาก ใน Transformer จริงทำหลายหัวพร้อมกัน (Multi-Head) และมีตำแหน่ง (Positional Encoding) เพิ่ม</p>
+</div>
+<script>
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+const $=id=>document.getElementById(id);
+const rand=(a,b)=>a+Math.random()*(b-a);
+const SENTENCES=[['แมว','นั่ง','บน','เสื่อ'],['AI','เรียน','รู้','ภาษา'],['ฉัน','รัก','การ','เรียนรู้']];
+const D=8, DK=Math.sqrt(D);
+let toks=[], emb={}, Wq,Wk,Wv, Q,K,V, scores, attn, outV, row=0, playing=false, timer=null;
+
+function newWeights(){
+  Wq=Array.from({length:D},()=>Array.from({length:D},()=>rand(-0.8,0.8)));
+  Wk=Array.from({length:D},()=>Array.from({length:D},()=>rand(-0.8,0.8)));
+  Wv=Array.from({length:D},()=>Array.from({length:D},()=>rand(-0.8,0.8)));
+}
+function setSentence(si){
+  toks=SENTENCES[si];
+  emb={};
+  for(const t of toks){
+    if(!emb[t])emb[t]=Array.from({length:D},()=>rand(-1,1));
+  }
+  newWeights();
+  compute();row=0;
+  stop();$('play').textContent='▶ เล่น';
+  draw();
+}
+function matVec(M,v){return M.map(r=>r.reduce((s,x,i)=>s+x*v[i],0));}
+function dot(a,b){return a.reduce((s,v,i)=>s+v*b[i],0);}
+function softmaxRow(v){
+  const mx=Math.max(...v);
+  const e=v.map(x=>Math.exp(x-mx));
+  const s=e.reduce((a,b)=>a+b,0);
+  return e.map(x=>x/s);
+}
+function compute(){
+  const n=toks.length;
+  Q=toks.map(t=>matVec(Wq,emb[t]));
+  K=toks.map(t=>matVec(Wk,emb[t]));
+  V=toks.map(t=>matVec(Wv,emb[t]));
+  scores=[];
+  for(let i=0;i<n;i++)scores.push(K.map(k=>dot(Q[i],k)/DK));
+  attn=scores.map(softmaxRow);
+  outV=attn.map((a,i)=>V[0].map((_,d)=>a.reduce((s,w,j)=>s+w*V[j][d],0)));
+}
+
+function draw(){
+  const n=toks.length;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const pad=60, cs=76;
+  const size=n*cs;
+  const ox=(canvas.width-size)/2, oy=(canvas.height-size)/2;
+  // column labels (keys)
+  ctx.font='bold 14px sans-serif';ctx.textAlign='center';
+  for(let j=0;j<n;j++){
+    ctx.fillStyle='#e11d48';
+    ctx.fillText('K: '+toks[j],ox+j*cs+cs/2,oy-16);
+  }
+  // rows: label + cells
+  for(let i=0;i<n;i++){
+    ctx.fillStyle='#e11d48';ctx.textAlign='right';
+    ctx.fillText('Q: '+toks[i],ox-12,oy+i*cs+cs/2+5);
+    for(let j=0;j<n;j++){
+      const filled=i<row||(i===row&&j<n);
+      const v=filled?attn[i][j]:0;
+      ctx.fillStyle='rgba(225,29,72,'+(v*0.95+0.04).toFixed(2)+')';
+      ctx.fillRect(ox+j*cs,oy+i*cs,cs-3,cs-3);
+      ctx.strokeStyle='#ffe4e6';ctx.lineWidth=1;
+      ctx.strokeRect(ox+j*cs,oy+i*cs,cs-3,cs-3);
+      if(filled){
+        ctx.fillStyle=v>0.4?'#fff':'#9f1239';
+        ctx.font='bold 13px sans-serif';
+        ctx.fillText(v.toFixed(2),ox+j*cs+(cs-3)/2,oy+i*cs+(cs-3)/2+5);
+      }
+    }
+  }
+  // highlight active row
+  if(row<n){
+    ctx.strokeStyle='#0f172a';ctx.lineWidth=3;
+    ctx.strokeRect(ox-2,oy+row*cs-2,size+4,cs+1);
+  }
+  // side panels
+  if(row<n){
+    const sc=scores[row], pr=attn[row];
+    $('cur').textContent=toks[row]+' (แถวที่ '+(row+1)+')';
+    const scEl=$('scores');scEl.innerHTML='';
+    for(let j=0;j<n;j++){
+      const bar=document.createElement('div');
+      const norm=(sc[j]-Math.min(...sc))/Math.max(1e-9,Math.max(...sc)-Math.min(...sc));
+      bar.innerHTML='<div style="display:flex;justify-content:space-between;font-size:12px"><span>'+toks[j]+'</span><span>'+sc[j].toFixed(2)+'</span></div><div class="barwrap"><div class="bar" style="width:'+(norm*100).toFixed(0)+'%"></div></div>';
+      scEl.appendChild(bar);
+    }
+    const prEl=$('probs');prEl.innerHTML='';
+    for(let j=0;j<n;j++){
+      const bar=document.createElement('div');
+      bar.innerHTML='<div style="display:flex;justify-content:space-between;font-size:12px"><span>'+toks[j]+'</span><span>'+pr[j].toFixed(2)+'</span></div><div class="barwrap"><div class="bar" style="width:'+(pr[j]*100).toFixed(0)+'%"></div></div>';
+      prEl.appendChild(bar);
+    }
+    const o=outV[row];
+    $('out').innerHTML='<span style="font-size:13px">['+o.slice(0,4).map(v=>v.toFixed(2)).join(', ')+', …]</span>';
+  }else{
+    $('cur').textContent='— เสร็จสิ้นทุก token —';
+  }
+}
+function doStep(){
+  if(row<toks.length){row++;draw();}
+  if(row>=toks.length){clearTimer();playing=false;$('play').textContent='▶ เล่น';}
+}
+function clearTimer(){if(timer){clearInterval(timer);timer=null;}}
+function stop(){playing=false;clearTimer();}
+$('play').onclick=()=>{
+  if(playing){stop();$('play').textContent='▶ เล่น';return;}
+  if(row>=toks.length)row=0;
+  playing=true;$('play').textContent='⏸ หยุด';
+  timer=setInterval(doStep,1000);
+};
+$('step').onclick=()=>{stop();$('play').textContent='▶ เล่น';doStep();};
+$('reset').onclick=()=>{stop();$('play').textContent='▶ เล่น';newWeights();compute();row=0;draw();};
+$('s1').onclick=()=>setSentence(0);
+$('s2').onclick=()=>setSentence(1);
+$('s3').onclick=()=>setSentence(2);
+
+setSentence(0);
+</script>
+</body>
+</html>

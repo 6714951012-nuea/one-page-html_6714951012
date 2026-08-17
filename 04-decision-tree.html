@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Decision Tree — ML Visualizer</title>
+<style>
+:root{--accent:#059669;--bg:#f1f5f9;--card:#fff;--ink:#0f172a;--mut:#64748b;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;align-items:center;padding:28px 16px;gap:20px}
+header{text-align:center}
+.badge{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--accent);border-radius:999px;padding:4px 14px;margin-bottom:10px}
+h1{font-size:30px}
+.sub{color:var(--mut);margin-top:6px;max-width:680px}
+.card{background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:18px;max-width:880px;width:100%}
+.card h3{font-size:15px;color:var(--mut);margin:6px 0 10px;font-weight:600}
+canvas{display:block;width:100%;height:auto;border-radius:10px;background:#fafcff;border:1px solid #e2e8f0}
+.controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center}
+button{border:none;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;background:#e2e8f0;color:#0f172a;transition:.15s}
+button:hover{filter:brightness(.96)}
+button.primary{background:var(--accent);color:#fff}
+button.danger{background:#fee2e2;color:#b91c1c}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;font-size:13px}
+.stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
+.stat b{color:var(--accent);font-size:15px}
+.hint{color:var(--mut);font-size:13px;margin-left:auto}
+.info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
+.info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
+code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div class="badge">Supervised Learning</div>
+  <h1>Decision Tree</h1>
+  <p class="sub">แบ่งข้อมูลซ้ำ ๆ ด้วยเงื่อนไข <b>x &lt; t</b> หรือ <b>y &lt; t</b> เพื่อให้แต่ละส่วน "บริสุทธิ์" มากที่สุด (ใช้ <b>Gini Impurity</b> วัด)</p>
+</header>
+<div class="card">
+  <canvas id="c" width="820" height="400"></canvas>
+  <div class="controls">
+    <button id="play" class="primary">▶ เล่นอัตโนมัติ</button>
+    <button id="step">ขั้นถัดไป</button>
+    <button id="rand">สุ่มข้อมูล</button>
+    <button id="reset" class="danger">รีเซ็ต</button>
+    <span class="hint">กด "ขั้นถัดไป" เพื่อดูต้นไม้สร้างทีละกิ่ง</span>
+  </div>
+  <div class="stats">
+    <div class="stat">โหนดที่สร้างแล้ว: <b id="revealed">0</b></div>
+    <div class="stat">โหนดทั้งหมด: <b id="total">0</b></div>
+    <div class="stat">ความลึกสูงสุด: <b>4</b></div>
+  </div>
+</div>
+<div class="card">
+  <h3>โครงสร้างต้นไม้ (Tree Structure)</h3>
+  <canvas id="t" width="820" height="360"></canvas>
+</div>
+<div class="info">
+  <h2>หลักการทำงาน</h2>
+  <p>Decision Tree แบ่งข้อมูลด้วยการลองทุกจุดตัดของทุก feature แล้วเลือกจุดที่ทำให้ <b>Gini Impurity</b> ลดลงมากที่สุด ทำซ้ำจนข้อมูลในแต่ละใบเป็นคลาสเดียว (หรือถึงความลึกสูงสุด) ข้อดีคือตีความง่าย ข้อเสียคือ overfit ถ้าต้นไม้ลึกเกินไป</p>
+</div>
+<script>
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+const tcan=document.getElementById('t'), tctx=tcan.getContext('2d');
+const W=canvas.width,H=canvas.height;
+const L=58,R=20,T=26,B=46;
+const $=id=>document.getElementById(id);
+const rand=(a,b)=>a+Math.random()*(b-a);
+const C0=[239,68,68], C1=[59,130,246];
+let pts=[], nodes=[], root=null, revealed=0, timer=null;
+
+function genData(n){
+  pts=[];
+  for(let i=0;i<n;i++){
+    const b=Math.floor(Math.random()*4);
+    const bx=b%2, by=Math.floor(b/2);
+    const x=bx*0.5+0.25+rand(-0.14,0.14);
+    const y=by*0.5+0.25+rand(-0.14,0.14);
+    const c=(bx^by)?1:0;
+    pts.push({x,y,c});
+  }
+  build();
+}
+function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
+function gini(arr){
+  if(!arr.length)return 0;
+  const c0=arr.filter(i=>pts[i].c===0).length/arr.length;
+  return 1-c0*c0-(1-c0)*(1-c0);
+}
+function majority(arr){
+  const c1=arr.filter(i=>pts[i].c===1).length;
+  return c1>=arr.length/2?1:0;
+}
+function build(){
+  nodes=[];revealed=0;clearTimer();
+  root=buildNode(pts.map((_,i)=>i),0,0,{x0:0,y0:0,x1:1,y1:1});
+  $('play').textContent='▶ เล่นอัตโนมัติ';
+  $('total').textContent=nodes.length;
+  draw();drawTree();
+}
+function buildNode(inds,depth,idx,region){
+  const node={depth,idx,region,leaf:false,left:null,right:null,f:null,t:null,label:0};
+  if(depth>=4||inds.length<8||gini(inds)<1e-6){
+    node.leaf=true;node.label=majority(inds);
+    nodes.push(node);return node;
+  }
+  let best=null;
+  for(const f of ['x','y']){
+    const vals=[...new Set(inds.map(i=>pts[i][f]))].sort((a,b)=>a-b);
+    for(let j=0;j<vals.length-1;j++){
+      const t=(vals[j]+vals[j+1])/2;
+      const left=inds.filter(i=>pts[i][f]<=t), right=inds.filter(i=>pts[i][f]>t);
+      if(!left.length||!right.length)continue;
+      const g=gini(inds)-(left.length/inds.length)*gini(left)-(right.length/inds.length)*gini(right);
+      if(!best||g>best.g)best={f,t,left,right,g};
+    }
+  }
+  if(!best||best.g<1e-4){
+    node.leaf=true;node.label=majority(inds);
+    nodes.push(node);return node;
+  }
+  node.f=best.f;node.t=best.t;
+  const key=best.f==='x'?'x1':'y1';
+  node.left=buildNode(best.left,depth+1,idx*2,Object.assign({},region,{[key]:best.t}));
+  const key2=best.f==='x'?'x0':'y0';
+  node.right=buildNode(best.right,depth+1,idx*2+1,Object.assign({},region,{[key2]:best.t}));
+  nodes.push(node);
+  return node;
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const shown=nodes.slice(0,revealed);
+  // leaf shading
+  for(const n of shown){
+    if(!n.leaf)continue;
+    const r=n.region;
+    const a=px({x:r.x0,y:r.y1}), d=px({x:r.x1,y:r.y0});
+    ctx.fillStyle='rgba('+(n.label===0?C0:C1).join(',')+',0.18)';
+    ctx.fillRect(a.x,a.y,d.x-a.x,d.y-a.y);
+  }
+  // split lines
+  for(const n of shown){
+    if(n.leaf)continue;
+    const r=n.region;
+    const a=px({x:r.x0,y:r.y1}), d=px({x:r.x1,y:r.y0});
+    let sx,sy,ex,ey;
+    if(n.f==='x'){
+      const xx=px({x:n.t,y:0}).x;
+      sx=xx;sy=a.y;ex=xx;ey=d.y;
+    }else{
+      const yy=px({x:0,y:n.t}).y;
+      sx=a.x;sy=yy;ex=d.x;ey=yy;
+    }
+    ctx.strokeStyle='#0f172a';ctx.lineWidth=2.5;
+    ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ex,ey);ctx.stroke();
+  }
+  // grid + labels
+  ctx.lineWidth=1;ctx.strokeStyle='#e8eef5';
+  for(let i=0;i<=10;i++){
+    const gx=L+(W-L-R)*i/10;ctx.beginPath();ctx.moveTo(gx,T);ctx.lineTo(gx,H-B);ctx.stroke();
+    const gy=T+(H-T-B)*i/10;ctx.beginPath();ctx.moveTo(L,gy);ctx.lineTo(W-R,gy);ctx.stroke();
+  }
+  ctx.fillStyle='#94a3b8';ctx.font='11px sans-serif';ctx.textAlign='center';
+  for(let i=0;i<=10;i+=2)ctx.fillText((i/10).toFixed(1),L+(W-L-R)*i/10,H-B+16);
+  ctx.textAlign='right';
+  for(let i=0;i<=10;i+=2)ctx.fillText((i/10).toFixed(1),L-8,T+(H-T-B)*(1-i/10)+3);
+  // points
+  for(const p of pts){
+    const c=px(p), col=p.c===0?C0:C1;
+    ctx.beginPath();ctx.arc(c.x,c.y,4.5,0,Math.PI*2);
+    ctx.fillStyle='rgb('+col.join(',')+')';ctx.fill();
+    ctx.lineWidth=1;ctx.strokeStyle='rgba(0,0,0,.3)';ctx.stroke();
+  }
+  $('revealed').textContent=Math.min(revealed,nodes.length);
+}
+
+function drawTree(){
+  tctx.clearRect(0,0,tcan.width,tcan.height);
+  tctx.font='12px sans-serif';tctx.textAlign='center';
+  const shown=nodes.slice(0,revealed);
+  const byDepth={};
+  for(const n of shown)(byDepth[n.depth]=byDepth[n.depth]||[]).push(n);
+  // edges first
+  for(const n of shown){
+    if(n.leaf)continue;
+    for(const ch of [n.left,n.right]){
+      if(!shown.includes(ch))continue;
+      const p=nodePos(n), c=nodePos(ch);
+      tctx.strokeStyle='#cbd5e1';tctx.lineWidth=1.5;
+      tctx.beginPath();tctx.moveTo(p.x,p.y+24);tctx.lineTo(c.x,c.y-24);tctx.stroke();
+    }
+  }
+  // nodes
+  for(const n of shown){
+    const p=nodePos(n);
+    const rw=n.leaf?84:108, rh=48;
+    const x=p.x-rw/2, y=p.y-rh/2;
+    tctx.fillStyle=n.leaf?(n.label===0?'rgba(239,68,68,.85)':'rgba(59,130,246,.85)'):'#fff';
+    tctx.strokeStyle=n.leaf?'transparent':'#059669';tctx.lineWidth=2;
+    tctx.beginPath();tctx.roundRect(x,y,rw,rh,8);tctx.fill();tctx.stroke();
+    tctx.fillStyle=n.leaf?'#fff':'#0f172a';tctx.font='bold 12px sans-serif';
+    if(n.leaf)tctx.fillText('Class '+n.label,p.x,p.y+4);
+    else tctx.fillText(n.f+' < '+n.t.toFixed(2),p.x,p.y+4);
+  }
+}
+function nodePos(n){
+  const count=1<<n.depth;
+  const x=(n.idx+0.5)/count*tcan.width;
+  const y=40+n.depth*80;
+  return {x,y};
+}
+
+function clearTimer(){if(timer){clearInterval(timer);timer=null;}}
+$('play').onclick=()=>{
+  if(timer){clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';return;}
+  if(revealed>=nodes.length){revealed=0;draw();drawTree();}
+  $('play').textContent='⏸ หยุด';
+  timer=setInterval(()=>{
+    revealed++;
+    if(revealed>=nodes.length){clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';}
+    draw();drawTree();
+  },550);
+};
+$('step').onclick=()=>{
+  clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';
+  if(revealed<nodes.length){revealed++;draw();drawTree();}
+};
+$('rand').onclick=()=>{genData(110);};
+$('reset').onclick=()=>{revealed=0;clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';draw();drawTree();};
+
+genData(110);draw();drawTree();
+</script>
+</body>
+</html>

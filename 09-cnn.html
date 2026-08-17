@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CNN (Convolutional Neural Network) — ML Visualizer</title>
+<style>
+:root{--accent:#4f46e5;--bg:#f1f5f9;--card:#fff;--ink:#0f172a;--mut:#64748b;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;align-items:center;padding:28px 16px;gap:20px}
+header{text-align:center}
+.badge{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--accent);border-radius:999px;padding:4px 14px;margin-bottom:10px}
+h1{font-size:30px}
+.sub{color:var(--mut);margin-top:6px;max-width:680px}
+.card{background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:18px;max-width:920px;width:100%}
+.stage{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;justify-content:center}
+.stage .blk{text-align:center}
+.stage .blk p{font-size:12px;color:var(--mut);font-weight:700;margin-bottom:6px}
+.stage .blk .arrow{font-size:22px;align-self:center;margin-top:60px}
+canvas{display:block;border-radius:8px;background:#fafcff;border:1px solid #e2e8f0;image-rendering:pixelated}
+.controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;align-items:center}
+button{border:none;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;background:#e2e8f0;color:#0f172a;transition:.15s}
+button:hover{filter:brightness(.96)}
+button.primary{background:var(--accent);color:#fff}
+button.danger{background:#fee2e2;color:#b91c1c}
+select{border:1px solid #cbd5e1;border-radius:8px;padding:9px 12px;font-size:14px;background:#fff}
+label.check{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;font-size:13px}
+.stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
+.stat b{color:var(--accent);font-size:15px}
+.info{max-width:920px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
+.info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
+code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div class="badge">Deep Learning</div>
+  <h1>CNN — Convolutional Neural Network</h1>
+  <p class="sub">ดู <b>Convolution</b> (kernel สไลด์บนภาพ) และ <b>Max Pooling</b> (ลดขนาดภาพ) แบบทีละขั้นตอน</p>
+</header>
+<div class="card">
+  <div class="stage">
+    <div class="blk">
+      <p>อินพุต 7×7</p>
+      <canvas id="inp" width="252" height="252"></canvas>
+    </div>
+    <div class="blk arrow">→</div>
+    <div class="blk">
+      <p>Feature Map 5×5 (Conv 3×3 + ReLU)</p>
+      <canvas id="fm" width="220" height="220"></canvas>
+    </div>
+    <div class="blk arrow">→</div>
+    <div class="blk">
+      <p>Max Pooling 2×2 → 2×2</p>
+      <canvas id="pool" width="132" height="132"></canvas>
+    </div>
+    <div class="blk">
+      <p>Kernel 3×3</p>
+      <canvas id="kern" width="120" height="120"></canvas>
+    </div>
+  </div>
+  <div class="controls">
+    <button id="play" class="primary">▶ เล่น</button>
+    <button id="step">ขั้นถัดไป</button>
+    <button id="img" >🎲 สุ่มภาพ</button>
+    <button id="reset" class="danger">รีเซ็ต</button>
+    <select id="kselect">
+      <option value="edge" selected>Edge Detection (ขอบภาพ)</option>
+      <option value="sharpen">Sharpen (คมชัด)</option>
+      <option value="blur">Blur (เบลอ)</option>
+      <option value="diag">Diagonal (เส้นทแยง)</option>
+    </select>
+    <label class="check"><input type="checkbox" id="relu" checked> ใช้ ReLU (ค่าลบ→0)</label>
+  </div>
+  <div class="stats">
+    <div class="stat">ตำแหน่ง kernel: <b id="pos">(0,0)</b></div>
+    <div class="stat">ขนาดอินพุต→FM→Pool: <b id="dims">7×7 → 5×5 → 2×2</b></div>
+  </div>
+</div>
+<div class="info">
+  <h2>หลักการทำงาน</h2>
+  <p><b>Convolution:</b> kernel ขนาด 3×3 สไลด์ (stride 1) ทับบนภาพ คำนวณผลรวมแบบ <code>(ภาพ × kernel)</code> ทีละตำแหน่ง ได้ Feature Map ที่เล็กลง (7−3+1 = 5) จากนั้นผ่าน <b>ReLU</b> <code>max(0, x)</code> เพื่อตัดค่าลบ<br>
+  <b>Max Pooling:</b> แบ่ง Feature Map เป็นบล็อก 2×2 แล้วเก็บค่าที่มากที่สุด ลดขนาดลงครึ่งหนึ่ง (5×5 → 2×2) ทำให้โมเดลทนต่อการเลื่อนของวัตถุและลดจำนวนพารามิเตอร์</p>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const rand=(a,b)=>a+Math.random()*(b-a);
+const IMG=7,K=3,FM=5,POOL=2;
+const CI=252, CS=36, CCS=44, PCS=66;
+let img=[], fm=[], fmShow=[], pooled=[], kernel=null, kid='edge', pos=0, playing=false, timer=null;
+const kernels={
+  edge:[[-1,-1,-1],[-1,8,-1],[-1,-1,-1]],
+  sharpen:[[0,-1,0],[-1,5,-1],[0,-1,0]],
+  blur:[[1,1,1],[1,1,1],[1,1,1]].map(r=>r.map(v=>v/9)),
+  diag:[[1,0,-1],[0,0,0],[-1,0,1]]
+};
+function randImg(){
+  img=Array.from({length:IMG},()=>new Array(IMG).fill(0));
+  for(let r=0;r<3;r++){
+    const x0=Math.floor(rand(0,4)), y0=Math.floor(rand(0,4)), w=Math.floor(rand(2,4)), h=Math.floor(rand(2,4));
+    for(let i=y0;i<Math.min(IMG,y0+h);i++)for(let j=x0;j<Math.min(IMG,x0+w);j++)img[i][j]=1;
+  }
+  computeAll();pos=0;
+}
+function convAt(i,j){
+  let s=0;
+  for(let u=0;u<K;u++)for(let v=0;v<K;v++)s+=img[i+u][j+v]*kernel[u][v];
+  return s;
+}
+function computeAll(){
+  kernel=kernels[kid];
+  fm=[];
+  for(let i=0;i<FM;i++){const row=[];for(let j=0;j<FM;j++)row.push(convAt(i,j));fm.push(row);}
+  const useReLU=$('relu').checked;
+  fmShow=fm.map(row=>row.map(v=>useReLU?Math.max(0,v):v));
+  pooled=Array.from({length:POOL},()=>new Array(POOL).fill(0));
+  for(let i=0;i<POOL;i++)for(let j=0;j<POOL;j++){
+    let mx=-1e9;
+    for(let u=0;u<2;u++)for(let v=0;v<2;v++)mx=Math.max(mx,fmShow[i*2+u][j*2+v]);
+    pooled[i][j]=mx;
+  }
+}
+function cellStyle(v,maxA){
+  if(Math.abs(v)<1e-9)return 'rgba(241,245,249,0.9)';
+  const a=Math.min(1,Math.abs(v)/maxA);
+  return v>0?'rgba(239,68,68,'+a.toFixed(2)+')':'rgba(59,130,246,'+a.toFixed(2)+')';
+}
+function drawInp(){
+  const c=$('inp'),x=c.getContext('2d');
+  x.clearRect(0,0,CI,CI);
+  for(let i=0;i<IMG;i++)for(let j=0;j<IMG;j++){
+    x.fillStyle=img[i][j]===1?'#334155':'#f8fafc';
+    x.fillRect(j*CS,i*CS,CS,CS);
+    x.strokeStyle='#e2e8f0';x.lineWidth=1;x.strokeRect(j*CS,i*CS,CS,CS);
+    x.fillStyle=img[i][j]===1?'#fff':'#94a3b8';x.font='13px sans-serif';x.textAlign='center';
+    x.fillText(img[i][j],j*CS+CS/2,i*CS+CS/2+4);
+  }
+  // highlight kernel window
+  const row=Math.floor(pos/FM), col=pos%FM;
+  if(pos<FM*FM){
+    x.strokeStyle='#4f46e5';x.lineWidth=3;
+    x.strokeRect(col*CS-1.5,row*CS-1.5,CS*K+3,CS*K+3);
+  }
+}
+function drawFM(){
+  const c=$('fm'),x=c.getContext('2d');
+  x.clearRect(0,0,c.width,c.height);
+  let maxA=0;
+  for(const row of fmShow)for(const v of row)maxA=Math.max(maxA,Math.abs(v));
+  if(maxA===0)maxA=1;
+  const total=FM*FM;
+  for(let i=0;i<FM;i++)for(let j=0;j<FM;j++){
+    const idx=i*FM+j;
+    if(idx>pos)continue;
+    x.fillStyle=cellStyle(fmShow[i][j],maxA);
+    x.fillRect(j*CCS,i*CCS,CCS,CCS);
+    x.strokeStyle='#e2e8f0';x.lineWidth=1;x.strokeRect(j*CCS,i*CCS,CCS,CCS);
+    x.fillStyle=Math.abs(fmShow[i][j])/maxA>0.6?'#fff':'#334155';
+    x.font='11px sans-serif';x.textAlign='center';
+    x.fillText(fmShow[i][j].toFixed(1),j*CCS+CCS/2,i*CCS+CCS/2+4);
+  }
+  if(pos<total){
+    const row=Math.floor(pos/FM), col=pos%FM;
+    x.strokeStyle='#4f46e5';x.lineWidth=3;x.strokeRect(col*CCS-1.5,row*CCS-1.5,CCS+3,CCS+3);
+  }
+  // pooled after conv done
+  if(pos>=total){
+    const p=$('pool'),px=p.getContext('2d');
+    px.clearRect(0,0,p.width,p.height);
+    for(let i=0;i<POOL;i++)for(let j=0;j<POOL;j++){
+      px.fillStyle=cellStyle(pooled[i][j],maxA);
+      px.fillRect(j*PCS,i*PCS,PCS,PCS);
+      px.strokeStyle='#e2e8f0';px.lineWidth=1;px.strokeRect(j*PCS,i*PCS,PCS,PCS);
+      px.fillStyle='#334155';px.font='bold 12px sans-serif';px.textAlign='center';
+      px.fillText(pooled[i][j].toFixed(1),j*PCS+PCS/2,i*PCS+PCS/2+4);
+    }
+  }
+}
+function drawKern(){
+  const c=$('kern'),x=c.getContext('2d');
+  x.clearRect(0,0,c.width,c.height);
+  let maxA=0;
+  for(const row of kernel)for(const v of row)maxA=Math.max(maxA,Math.abs(v));
+  if(maxA===0)maxA=1;
+  const ks=c.width/3;
+  for(let i=0;i<3;i++)for(let j=0;j<3;j++){
+    x.fillStyle=cellStyle(kernel[i][j],maxA);
+    x.fillRect(j*ks,i*ks,ks,ks);
+    x.strokeStyle='#e2e8f0';x.lineWidth=1;x.strokeRect(j*ks,i*ks,ks,ks);
+    x.fillStyle='#334155';x.font='bold 13px sans-serif';x.textAlign='center';
+    x.fillText(kernel[i][j].toFixed(1),j*ks+ks/2,i*ks+ks/2+5);
+  }
+}
+function drawAll(){
+  drawInp();drawFM();drawKern();
+  const row=Math.floor(pos/FM), col=pos%FM;
+  $('pos').textContent='('+row+','+col+')';
+  $('dims').textContent='7×7 → 5×5 → 2×2';
+}
+function clearTimer(){if(timer){clearInterval(timer);timer=null;}}
+$('play').onclick=()=>{
+  if(playing){clearTimer();playing=false;$('play').textContent='▶ เล่น';return;}
+  if(pos>=FM*FM)pos=0;
+  playing=true;$('play').textContent='⏸ หยุด';
+  timer=setInterval(()=>{
+    pos++;
+    if(pos>=FM*FM){pos=FM*FM;clearTimer();playing=false;$('play').textContent='▶ เล่น';}
+    drawAll();
+  },400);
+};
+$('step').onclick=()=>{
+  clearTimer();playing=false;$('play').textContent='▶ เล่น';
+  if(pos<FM*FM){pos++;drawAll();}
+};
+$('img').onclick=()=>{clearTimer();playing=false;$('play').textContent='▶ เล่น';randImg();drawAll();};
+$('reset').onclick=()=>{clearTimer();playing=false;$('play').textContent='▶ เล่น';pos=0;drawAll();};
+$('kselect').onchange=e=>{kid=e.target.value;clearTimer();playing=false;$('play').textContent='▶ เล่น';computeAll();pos=0;drawAll();};
+$('relu').onchange=()=>{computeAll();drawAll();};
+
+randImg();drawAll();
+</script>
+</body>
+</html>

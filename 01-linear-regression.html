@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Linear Regression — ML Visualizer</title>
+<style>
+:root{--accent:#2563eb;--accent2:#60a5fa;--bg:#f1f5f9;--card:#fff;--ink:#0f172a;--mut:#64748b;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;align-items:center;padding:28px 16px;gap:20px}
+header{text-align:center}
+.badge{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;background:var(--accent);border-radius:999px;padding:4px 14px;margin-bottom:10px}
+h1{font-size:30px}
+.sub{color:var(--mut);margin-top:6px;max-width:680px}
+.card{background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:18px;max-width:880px;width:100%}
+canvas{display:block;width:100%;height:auto;border-radius:10px;background:#fafcff;border:1px solid #e2e8f0}
+.controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center}
+button{border:none;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;background:#e2e8f0;color:#0f172a;transition:.15s}
+button:hover{filter:brightness(.96)}
+button.primary{background:var(--accent);color:#fff}
+button.danger{background:#fee2e2;color:#b91c1c}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;font-size:13px}
+.stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
+.stat b{color:var(--accent);font-size:15px}
+.hint{color:var(--mut);font-size:13px;margin-left:auto}
+.info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
+.info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
+code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <div class="badge">Supervised Learning</div>
+  <h1>Linear Regression</h1>
+  <p class="sub">หาความสัมพันธ์เชิงเส้น <b>y = mx + b</b> ที่ fit ข้อมูลได้ดีที่สุด โดยใช้ <b>Gradient Descent</b> ลดค่า Loss (MSE)</p>
+</header>
+<div class="card">
+  <canvas id="c" width="820" height="460"></canvas>
+  <div class="controls">
+    <button id="rand" class="primary">สุ่มข้อมูล</button>
+    <button id="train">เริ่ม Gradient Descent</button>
+    <button id="clear" class="danger">ล้างทั้งหมด</button>
+    <span class="hint">💡 คลิกบนกราฟเพื่อเพิ่มจุดเอง</span>
+  </div>
+  <div class="stats">
+    <div class="stat">สมการ: <b id="eq">y = 0.000x + 0.000</b></div>
+    <div class="stat">Loss (MSE): <b id="loss">—</b></div>
+    <div class="stat">จำนวนจุด: <b id="n">0</b></div>
+  </div>
+</div>
+<div class="info">
+  <h2>หลักการทำงาน</h2>
+  <p><b>Linear Regression</b> หาเส้นตรงที่ทำให้ผลรวมความคลาดเคลื่อนกำลังสองเฉลี่ย (Mean Squared Error) น้อยที่สุด วิธี Gradient Descent จะปรับค่า <code>m</code> และ <code>b</code> ไปทีละเล็กน้อยในทิศทางตรงข้ามกับ gradient จนค่า loss ลดลงจนถึงจุดต่ำสุด เส้นประสีเทาคือคำตอบที่ exact (Least Squares) ซึ่ง Gradient Descent ควรลู่เข้าหาเส้นนี้</p>
+</div>
+<script>
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+const L=58,R=20,T=26,B=46;
+const $=id=>document.getElementById(id);
+const rand=(a,b)=>a+Math.random()*(b-a);
+let points=[], m=0, b=0, running=false, raf=null, steps=0;
+const lossHist=[];
+
+function genData(n){
+  points=[];
+  for(let i=0;i<n;i++){
+    const x=rand(0.06,0.94);
+    const y=0.5*x+0.22+rand(-0.15,0.15);
+    points.push({x,y});
+  }
+  resetParams();
+}
+function resetParams(){m=0;b=0;steps=0;lossHist.length=0;stop();$('train').textContent='เริ่ม Gradient Descent';}
+function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
+function inv(c){return {x:(c.x-L)/(W-L-R), y:1-(c.y-T)/(H-T-B)}}
+
+function mse(){
+  if(!points.length)return 0;
+  let s=0;for(const p of points){const e=m*p.x+b-p.y;s+=e*e;}return s/points.length;
+}
+function sgdStep(){
+  const lr=0.55;
+  let dm=0,db=0;
+  for(const p of points){const e=m*p.x+b-p.y;dm+=-2*p.x*e;db+=-2*e;}
+  dm/=points.length;db/=points.length;
+  m-=lr*dm;b-=lr*db;
+}
+function exactFit(){
+  const n=points.length;let sx=0,sy=0,sxx=0,sxy=0;
+  for(const p of points){sx+=p.x;sy+=p.y;sxx+=p.x*p.x;sxy+=p.x*p.y;}
+  const den=n*sxx-sx*sx;
+  if(!den)return null;
+  const mm=(n*sxy-sx*sy)/den;
+  return {m:mm,b:(sy-mm*sx)/n};
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // grid
+  ctx.lineWidth=1;ctx.strokeStyle='#e8eef5';
+  for(let i=0;i<=10;i++){
+    const gx=L+(W-L-R)*i/10;ctx.beginPath();ctx.moveTo(gx,T);ctx.lineTo(gx,H-B);ctx.stroke();
+    const gy=T+(H-T-B)*i/10;ctx.beginPath();ctx.moveTo(L,gy);ctx.lineTo(W-R,gy);ctx.stroke();
+  }
+  // axis labels
+  ctx.fillStyle='#94a3b8';ctx.font='11px sans-serif';ctx.textAlign='center';
+  ctx.fillText('x',W/2,H-8);
+  ctx.save();ctx.translate(14,H/2);ctx.rotate(-Math.PI/2);ctx.fillText('y',0,0);ctx.restore();
+  for(let i=0;i<=10;i+=2)ctx.fillText((i/10).toFixed(1),L+(W-L-R)*i/10,H-B+16);
+  ctx.textAlign='right';
+  for(let i=0;i<=10;i+=2)ctx.fillText((i/10).toFixed(1),L-8,T+(H-T-B)*(1-i/10)+3);
+
+  // exact least-squares line (target, dashed)
+  const ef=exactFit();
+  if(ef){
+    const a=px({x:0,y:ef.b}), d=px({x:1,y:ef.m+ef.b});
+    ctx.strokeStyle='#94a3b8';ctx.setLineDash([6,5]);ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(d.x,d.y);ctx.stroke();ctx.setLineDash([]);
+  }
+  // residual lines
+  ctx.lineWidth=1;ctx.strokeStyle='rgba(37,99,235,.25)';
+  for(const p of points){
+    const c=px(p), py=px({x:p.x,y:m*p.x+b});
+    ctx.beginPath();ctx.moveTo(c.x,c.y);ctx.lineTo(py.x,py.y);ctx.stroke();
+  }
+  // points
+  for(const p of points){
+    const c=px(p);
+    ctx.beginPath();ctx.arc(c.x,c.y,5,0,Math.PI*2);
+    ctx.fillStyle='#0ea5e9';ctx.fill();ctx.lineWidth=1.5;ctx.strokeStyle='#0369a1';ctx.stroke();
+  }
+  // current regression line
+  const a=px({x:0,y:b}), d=px({x:1,y:m+b});
+  ctx.strokeStyle='#2563eb';ctx.lineWidth=3.5;
+  ctx.shadowColor='rgba(37,99,235,.35)';ctx.shadowBlur=8;
+  ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(d.x,d.y);ctx.stroke();
+  ctx.shadowBlur=0;
+
+  // loss chart inset
+  if(lossHist.length>1){
+    const iw=170, ih=74, ix=W-R-iw-12, iy=T+12;
+    ctx.fillStyle='rgba(255,255,255,.93)';ctx.strokeStyle='#e2e8f0';
+    ctx.beginPath();ctx.roundRect(ix,iy,iw,ih,8);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#64748b';ctx.font='10px sans-serif';ctx.textAlign='left';
+    ctx.fillText('Loss (MSE)',ix+8,iy+14);
+    const max=Math.max(...lossHist), min=Math.min(...lossHist);
+    const rng=Math.max(max-min,1e-9);
+    ctx.strokeStyle='#f43f5e';ctx.lineWidth=1.8;ctx.beginPath();
+    lossHist.forEach((v,i)=>{
+      const x=ix+8+(iw-16)*i/(lossHist.length-1);
+      const y=iy+ih-9-(ih-22)*(v-min)/rng;
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+    ctx.fillStyle='#f43f5e';ctx.font='bold 11px sans-serif';
+    ctx.fillText(lossHist[lossHist.length-1].toFixed(4),ix+8,iy+ih-9);
+  }
+
+  $('eq').textContent='y = '+m.toFixed(3)+'x + '+b.toFixed(3);
+  $('loss').textContent=points.length?mse().toFixed(4):'—';
+  $('n').textContent=points.length;
+}
+
+function loop(){
+  if(!running)return;
+  for(let i=0;i<25;i++){sgdStep();steps++;}
+  lossHist.push(mse());
+  if(mse()<0.00035||steps>4000){stop();$('train').textContent='เริ่ม Gradient Descent';}
+  draw();
+  raf=requestAnimationFrame(loop);
+}
+function start(){if(!points.length)return;running=true;$('train').textContent='⏸ หยุด';if(raf)cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
+function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=null;}
+
+$('rand').onclick=()=>{genData(24);draw();};
+$('train').onclick=()=>{if(running){stop();$('train').textContent='เริ่ม Gradient Descent';}else{resetParams();start();}};
+$('clear').onclick=()=>{points=[];resetParams();draw();};
+
+canvas.addEventListener('click',e=>{
+  const r=canvas.getBoundingClientRect();
+  const c=inv({x:(e.clientX-r.left)*(W/r.width),y:(e.clientY-r.top)*(H/r.height)});
+  if(c.x<0.02||c.x>0.98||c.y<0.02||c.y>0.98)return;
+  points.push({x:Math.max(0,Math.min(1,c.x)),y:Math.max(0,Math.min(1,c.y))});
+  draw();
+});
+
+genData(24);draw();
+</script>
+</body>
+</html>
