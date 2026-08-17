@@ -21,6 +21,8 @@ h1{font-size:30px}
 .stage .blk .arrow{font-size:22px;align-self:center;margin-top:60px}
 canvas{display:block;border-radius:8px;background:#fafcff;border:1px solid #e2e8f0;image-rendering:pixelated}
 #inp{cursor:crosshair}
+.lc{margin-top:16px}
+.lctitle{font-size:13px;color:var(--mut);font-weight:600;margin-bottom:8px}
 .controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;align-items:center}
 button{border:none;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;background:#e2e8f0;color:#0f172a;transition:.15s}
 button:hover{filter:brightness(.96)}
@@ -68,6 +70,10 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
       <canvas id="kern" width="120" height="120"></canvas>
     </div>
   </div>
+  <div class="lc">
+    <div class="lctitle">📈 Learning Curve (การตอบสนองของ kernel) — ค่า |Feature Map| ตามตำแหน่งที่ kernel สไลด์</div>
+    <canvas id="lc" width="820" height="150"></canvas>
+  </div>
   <div class="controls">
     <button id="play" class="primary">▶ เล่น</button>
     <button id="step">ขั้นถัดไป</button>
@@ -107,6 +113,7 @@ const rand=(a,b)=>a+Math.random()*(b-a);
 const IMG=7,K=3,FM=5,POOL=2;
 const CI=252, CS=36, CCS=44, PCS=66;
 let img=[], fm=[], fmShow=[], pooled=[], kernel=null, kid='edge', pos=0, playing=false, timer=null;
+let respHist=[];
 const kernels={
   edge:[[-1,-1,-1],[-1,8,-1],[-1,-1,-1]],
   sharpen:[[0,-1,0],[-1,5,-1],[0,-1,0]],
@@ -127,6 +134,7 @@ function convAt(i,j){
   return s;
 }
 function computeAll(){
+  respHist=[];
   kernel=kernels[kid];
   fm=[];
   for(let i=0;i<FM;i++){const row=[];for(let j=0;j<FM;j++)row.push(convAt(i,j));fm.push(row);}
@@ -212,6 +220,7 @@ function drawKern(){
 }
 function drawAll(){
   drawInp();drawFM();drawKern();
+  drawLC();
   let mx=-1e9,sum=0;
   for(const fr of fmShow)for(const v of fr){mx=Math.max(mx,v);sum+=Math.abs(v);}
   $('fmmax').textContent=(mx===-1e9?0:mx).toFixed(2);
@@ -227,18 +236,44 @@ $('play').onclick=()=>{
   playing=true;$('play').textContent='⏸ หยุด';
   timer=setInterval(()=>{
     pos++;
+    if(pos<FM*FM)respHist.push(fmShow[Math.floor(pos/FM)][pos%FM]);
     if(pos>=FM*FM){pos=FM*FM;clearTimer();playing=false;$('play').textContent='▶ เล่น';}
     drawAll();
   },400);
 };
 $('step').onclick=()=>{
   clearTimer();playing=false;$('play').textContent='▶ เล่น';
-  if(pos<FM*FM){pos++;drawAll();}
+  if(pos<FM*FM){pos++;respHist.push(fmShow[Math.floor(pos/FM)][pos%FM]);drawAll();}
 };
 $('img').onclick=()=>{clearTimer();playing=false;$('play').textContent='▶ เล่น';randImg();drawAll();};
 $('reset').onclick=()=>{clearTimer();playing=false;$('play').textContent='▶ เล่น';pos=0;drawAll();};
 $('kselect').onchange=e=>{kid=e.target.value;clearTimer();playing=false;$('play').textContent='▶ เล่น';computeAll();pos=0;drawAll();};
 $('pselect').onchange=()=>{clearTimer();playing=false;$('play').textContent='▶ เล่น';computeAll();pos=0;drawAll();};
+function drawLC(){
+  const cc=document.getElementById('lc');
+  if(!cc)return;
+  const x=cc.getContext('2d');
+  const W2=cc.width,H2=cc.height;
+  x.clearRect(0,0,W2,H2);
+  const padL=46,padR=14,padT=22,padB=26;
+  const pw=W2-padL-padR, ph=H2-padT-padB;
+  x.strokeStyle='#e2e8f0';x.lineWidth=1;
+  x.strokeRect(padL,padT,pw,ph);
+  x.fillStyle='#94a3b8';x.font='10px sans-serif';x.textAlign='center';
+  x.fillText('ตำแหน่ง kernel (0..24)',padL+pw/2,H2-8);
+  if(respHist.length<2)return;
+  const maxA=Math.max(...respHist.map(Math.abs),1e-9);
+  x.strokeStyle='#4f46e5';x.lineWidth=2;x.beginPath();
+  respHist.forEach((v,i)=>{
+    const px2=padL+(i/(respHist.length-1))*pw;
+    const py=padT+ph*(1-Math.abs(v)/maxA);
+    i===0?x.moveTo(px2,py):x.lineTo(px2,py);
+  });
+  x.stroke();
+  x.fillStyle='#4f46e5';x.fillRect(padL+8,8,12,4);
+  x.fillStyle='#64748b';x.font='10px sans-serif';x.textAlign='left';
+  x.fillText('|FM| response',padL+24,12);
+}
 $('relu').onchange=()=>{computeAll();drawAll();};
 $('resetP').onclick=()=>{kid='edge';$('kselect').value='edge';$('pselect').value='max';$('relu').checked=true;computeAll();pos=0;drawAll();};
 const inpEl=$('inp');

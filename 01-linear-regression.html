@@ -25,6 +25,8 @@ button.danger{background:#fee2e2;color:#b91c1c}
 .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
 .stat b{color:var(--accent);font-size:15px}
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
+.lc{margin-top:14px}
+.lctitle{font-size:13px;color:var(--mut);font-weight:600;margin-bottom:8px}
 label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
 .check{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600}
 input[type=checkbox]{accent-color:var(--accent)}
@@ -48,6 +50,10 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
 </header>
 <div class="card">
   <canvas id="c" width="820" height="460"></canvas>
+  <div class="lc">
+    <div class="lctitle">📈 Learning Curve — Loss (แกนซ้าย, log) กับ R² (แกนขวา) ตาม Step</div>
+    <canvas id="lc" width="820" height="180"></canvas>
+  </div>
   <div class="controls">
     <button id="rand" class="primary">สุ่มข้อมูล</button>
     <button id="train">เริ่ม Gradient Descent</button>
@@ -85,7 +91,7 @@ const L=58,R=20,T=26,B=46;
 const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
 let points=[], m=0, b=0, mB=0, bB=0, running=false, raf=null, steps=0, diverged=false, divergedB=false, comp=false;
-const lossHist=[], lossHistB=[];
+const lossHist=[], lossHistB=[], r2Hist=[];
 
 function genData(n){
   points=[];
@@ -96,7 +102,7 @@ function genData(n){
   }
   resetParams();
 }
-function resetParams(){m=0;b=0;mB=0;bB=0;steps=0;lossHist.length=0;lossHistB.length=0;diverged=false;divergedB=false;stop();$('train').textContent='เริ่ม Gradient Descent';}
+function resetParams(){m=0;b=0;mB=0;bB=0;steps=0;lossHist.length=0;lossHistB.length=0;r2Hist.length=0;diverged=false;divergedB=false;stop();$('train').textContent='เริ่ม Gradient Descent';}
 function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
 function inv(c){return {x:(c.x-L)/(W-L-R), y:1-(c.y-T)/(H-T-B)}}
 
@@ -180,38 +186,7 @@ function draw(){
   ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(d.x,d.y);ctx.stroke();
   ctx.shadowBlur=0;
 
-  // loss chart inset (A/B)
-  if(lossHist.length>1||(comp&&lossHistB.length>1)){
-    const iw=190, ih=86, ix=W-R-iw-12, iy=T+12;
-    ctx.fillStyle='rgba(255,255,255,.93)';ctx.strokeStyle='#e2e8f0';
-    ctx.beginPath();ctx.roundRect(ix,iy,iw,ih,8);ctx.fill();ctx.stroke();
-    ctx.fillStyle='#64748b';ctx.font='10px sans-serif';ctx.textAlign='left';
-    ctx.fillText('Loss (MSE)',ix+8,iy+13);
-    ctx.fillStyle='#2563eb';ctx.fillRect(ix+8,iy+20,12,4);
-    ctx.fillStyle='#64748b';ctx.fillText('A (lr='+(+$('lr').value).toFixed(2)+')',ix+24,iy+24);
-    if(comp){
-      ctx.fillStyle='#f97316';ctx.fillRect(ix+8,iy+32,12,4);
-      ctx.fillStyle='#64748b';ctx.fillText('B (lr='+(+$('lrb').value).toFixed(2)+')',ix+24,iy+36);
-    }
-    const plotTop=iy+40;
-    const all=[...(comp?lossHistB:[]),...lossHist];
-    if(all.length>1){
-      const max=Math.max(...all),min=Math.min(...all);
-      const rng=Math.max(max-min,1e-9);
-      const ph=iy+ih-8-plotTop;
-      const series=[{h:lossHist,c:'#2563eb'},...(comp?[{h:lossHistB,c:'#f97316'}]:[])];
-      for(const s of series){
-        if(s.h.length<2)continue;
-        ctx.strokeStyle=s.c;ctx.lineWidth=2;ctx.beginPath();
-        s.h.forEach((v,i)=>{
-          const x=ix+8+(iw-16)*i/(s.h.length-1);
-          const y=plotTop+ph*(1-(v-min)/rng);
-          i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
-        });
-        ctx.stroke();
-      }
-    }
-  }
+  drawLC();
 
   $('eq').textContent='y = '+m.toFixed(3)+'x + '+b.toFixed(3);
   $('loss').textContent=(diverged?'∞ ลู่ออก! ':'')+(points.length?mse().toFixed(4):'—');
@@ -222,11 +197,67 @@ function draw(){
   $('lossb').textContent=(divergedB?'∞ ':'')+(comp?(points.length?mseB().toFixed(4):'—'):'—');
 }
 
+function drawLC(){
+  const cc=document.getElementById('lc');
+  if(!cc)return;
+  const x=cc.getContext('2d');
+  const W2=cc.width,H2=cc.height;
+  x.clearRect(0,0,W2,H2);
+  const padL=52,padR=52,padT=24,padB=30;
+  const pw=W2-padL-padR, ph=H2-padT-padB;
+  x.strokeStyle='#e2e8f0';x.lineWidth=1;
+  x.strokeRect(padL,padT,pw,ph);
+  const losses=[...(comp?lossHistB:[]),...lossHist];
+  if(!losses.length)return;
+  const loL=Math.max(Math.min(...losses),1e-5);
+  const hiL=Math.max(...losses,1e-4);
+  const span=Math.log10(hiL)-Math.log10(loL)||1;
+  const yOf=v=>padT+ph*(1-(Math.log10(Math.max(v,loL))-Math.log10(loL))/span);
+  x.font='10px sans-serif';x.textAlign='right';
+  for(let p=Math.floor(Math.log10(hiL));p>=Math.ceil(Math.log10(loL));p--){
+    const v=Math.pow(10,p);
+    const y=yOf(v);
+    x.strokeStyle='#eef2f7';x.beginPath();x.moveTo(padL,y);x.lineTo(padL+pw,y);x.stroke();
+    x.fillStyle='#94a3b8';x.fillText('1e'+p,padL-6,y+3);
+  }
+  const ay=v=>padT+ph*(1-v);
+  x.strokeStyle='#f1f5f9';
+  x.beginPath();x.moveTo(padL,ay(0));x.lineTo(padL+pw,ay(0));x.stroke();
+  x.fillStyle='#94a3b8';x.textAlign='left';
+  x.fillText('R² 1.0',padL+pw+6,ay(1)+3);
+  x.fillText('R² 0.0',padL+pw+6,ay(0)+3);
+  const nMax=Math.max(lossHist.length,comp?lossHistB.length:0);
+  if(r2Hist.length>1){
+    x.strokeStyle='#16a34a';x.lineWidth=2;x.beginPath();
+    r2Hist.forEach((v,i)=>{const px2=padL+(i/(nMax-1||1))*pw;const py=ay(v);i===0?x.moveTo(px2,py):x.lineTo(px2,py);});
+    x.stroke();
+  }
+  const series=[{h:lossHist,c:'#2563eb'},...(comp?[{h:lossHistB,c:'#f97316'}]:[])];
+  for(const s of series){
+    if(s.h.length<2)continue;
+    x.strokeStyle=s.c;x.lineWidth=2;x.beginPath();
+    s.h.forEach((v,i)=>{const px2=padL+(i/(nMax-1||1))*pw;const py=yOf(v);i===0?x.moveTo(px2,py):x.lineTo(px2,py);});
+    x.stroke();
+  }
+  x.textAlign='left';
+  x.fillStyle='#2563eb';x.fillRect(padL+8,8,12,4);
+  x.fillStyle='#64748b';x.fillText('Loss A',padL+24,12);
+  x.fillStyle='#16a34a';x.fillRect(padL+80,8,12,4);
+  x.fillStyle='#64748b';x.fillText('R²',padL+96,12);
+  if(comp){x.fillStyle='#f97316';x.fillRect(padL+130,8,12,4);x.fillStyle='#64748b';x.fillText('Loss B',padL+146,12);}
+  x.fillStyle='#94a3b8';x.textAlign='center';
+  x.fillText('step',padL+pw/2,H2-8);
+  x.textAlign='right';x.fillStyle='#2563eb';
+  x.fillText('loss='+(lossHist.length?lossHist[lossHist.length-1].toFixed(4):'—'),padL+pw,H2-8);
+  x.fillStyle='#16a34a';
+  x.fillText('R²='+(r2Hist.length?r2Hist[r2Hist.length-1].toFixed(3):'—'),padL+pw-120,H2-8);
+}
 function loop(){
   if(!running)return;
   for(let i=0;i<25;i++){sgdStep();steps++;}
   const cur=mse();
   lossHist.push(cur);
+  r2Hist.push(r2());
   if(cur>1e4){diverged=true;stop();$('train').textContent='เริ่ม Gradient Descent';}
   else if(cur<0.00035||steps>4000){stop();$('train').textContent='เริ่ม Gradient Descent';}
   if(comp){

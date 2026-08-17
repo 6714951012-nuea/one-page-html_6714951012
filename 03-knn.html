@@ -34,6 +34,8 @@ select{border:1px solid #cbd5e1;border-radius:8px;padding:9px 12px;font-size:14p
 .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
 .stat b{color:var(--accent);font-size:15px}
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
+.lc{margin-top:14px}
+.lctitle{font-size:13px;color:var(--mut);font-weight:600;margin-bottom:8px}
 .info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
 .info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
 code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
@@ -48,6 +50,10 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
 </header>
 <div class="card">
   <canvas id="c" width="820" height="460"></canvas>
+  <div class="lc">
+    <div class="lctitle">📈 Learning Curve (kNN ไม่มีการฝึก — ความแม่นยำตามค่า k) — คลิกแท่งเพื่อเลือก k</div>
+    <canvas id="lc" width="820" height="160"></canvas>
+  </div>
   <div class="controls">
     <button id="rand" class="primary">สุ่มข้อมูล</button>
     <button id="cls0" class="activeCls" style="background:#fee2e2;color:#b91c1c">เพิ่ม Class 0 (แดง)</button>
@@ -96,19 +102,31 @@ function genData(n){
     pts.push({x,y,c});
   }
   computeBoundary();
+  computeKAcc();
 }
 function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
 function inv(c){return {x:(c.x-L)/(W-L-R), y:1-(c.y-T)/(H-T-B)}}
 
 function d2(a,b){return metric==='manhattan'?(Math.abs(a.x-b.x)+Math.abs(a.y-b.y)):(a.x-b.x)**2+(a.y-b.y)**2;}
-function classify(p){
+function classify(p,kv){
   if(!pts.length)return null;
+  kv=kv||k;
   const ds=pts.map((pt,i)=>({i,d:d2(pt,p)})).sort((a,b)=>a.d-b.d);
-  const nn=ds.slice(0,k);
+  const nn=ds.slice(0,kv);
   let v0=0,v1=0;
   for(const x of nn){pts[x.i].c===0?v0++:v1++;}
   const c=(v0>v1?0:(v1>v0?1:(pts[nn[0].i].c)));
   return {cls:c, nn};
+}
+let kAccData=[];
+function computeKAcc(){
+  kAccData=[];
+  if(!pts.length)return;
+  for(let kv=1;kv<=15;kv++){
+    let ok=0;
+    for(const p of pts){if(classify(p,kv).cls===p.c)ok++;}
+    kAccData.push({k:kv,acc:ok/pts.length*100});
+  }
 }
 function computeBoundary(){
   boundGrid=[];
@@ -195,6 +213,7 @@ function draw(){
   let c0=0,c1=0;
   for(const p of pts)p.c===0?c0++:c1++;
   $('c0n').textContent=c0;$('c1n').textContent=c1;
+  drawKAcc();
 }
 
 let moveT=null;
@@ -212,16 +231,50 @@ canvas.addEventListener('click',e=>{
   const c=inv({x:(e.clientX-r.left)*(W/r.width),y:(e.clientY-r.top)*(H/r.height)});
   if(c.x<0.02||c.x>0.98||c.y<0.02||c.y>0.98)return;
   pts.push({x:Math.max(0,Math.min(1,c.x)),y:Math.max(0,Math.min(1,c.y)),c:selClass});
-  computeBoundary();draw();
+  computeBoundary();computeKAcc();draw();
 });
 
 $('rand').onclick=()=>{genData(36);draw();};
 $('clear').onclick=()=>{pts=[];computeBoundary();draw();};
 function kSync(){k=+$('k').value;$('kn').value=k;computeBoundary();draw();}
+function drawKAcc(){
+  const cc=document.getElementById('lc');
+  if(!cc)return;
+  const x=cc.getContext('2d');
+  const W2=cc.width,H2=cc.height;
+  x.clearRect(0,0,W2,H2);
+  if(!kAccData.length)return;
+  const maxA=Math.max(...kAccData.map(d=>d.acc),1e-9);
+  const padL=44,padR=10,padT=16,padB=26;
+  const bw=(W2-padL-padR)/kAccData.length;
+  for(const d of kAccData){
+    const h=(d.acc/maxA)*(H2-padT-padB);
+    const bx=padL+(d.k-1)*bw, by=H2-padB-h;
+    x.fillStyle=d.k===k?'#0d9488':'#99f6e4';
+    x.fillRect(bx+3,by,bw-6,h);
+    x.fillStyle=d.k===k?'#0d9488':'#0f766e';
+    x.font='10px sans-serif';x.textAlign='center';
+    x.fillText(d.acc.toFixed(0)+'%',bx+bw/2,by-4);
+    x.fillStyle=d.k===k?'#0d9488':'#64748b';
+    x.font='bold 11px sans-serif';
+    x.fillText('k='+d.k,bx+bw/2,H2-8);
+  }
+  x.fillStyle='#94a3b8';x.font='10px sans-serif';x.textAlign='center';
+  x.fillText('Accuracy (self) ตามค่า k',(padL+W2-padR)/2,12);
+}
 $('k').oninput=kSync;
-$('resetP').onclick=()=>{k=5;$('k').value=5;$('kn').value=5;metric='euclid';$('metric').value='euclid';computeBoundary();draw();};
+$('resetP').onclick=()=>{k=5;$('k').value=5;$('kn').value=5;metric='euclid';$('metric').value='euclid';computeBoundary();computeKAcc();draw();};
+$('lc').addEventListener('click',e=>{
+  const cc=document.getElementById('lc');
+  const r=cc.getBoundingClientRect();
+  const pxx=(e.clientX-r.left)*(cc.width/r.width);
+  const padL=44,padR=10;
+  const bw=(cc.width-padL-padR)/Math.max(1,kAccData.length);
+  const kk=Math.floor((pxx-padL)/bw)+1;
+  if(kk>=1&&kk<=15){k=kk;$('k').value=kk;$('kn').value=kk;kSync();}
+});
 $('kn').oninput=()=>{let v=Math.round(+$('kn').value);if(isNaN(v))v=5;v=Math.min(15,Math.max(1,v));$('k').value=v;kSync();};
-$('metric').onchange=e=>{metric=e.target.value;computeBoundary();draw();};
+$('metric').onchange=e=>{metric=e.target.value;computeBoundary();computeKAcc();draw();};
 $('cls0').onclick=()=>{selClass=0;$('cls0').classList.add('activeCls');$('cls1').classList.remove('activeCls');};
 $('cls1').onclick=()=>{selClass=1;$('cls1').classList.add('activeCls');$('cls0').classList.remove('activeCls');};
 

@@ -30,6 +30,8 @@ button.danger{background:#fee2e2;color:#b91c1c}
 .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
 .stat b{color:var(--accent);font-size:15px}
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
+.lc{margin-top:14px}
+.lctitle{font-size:13px;color:var(--mut);font-weight:600;margin-bottom:8px}
 label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
 input[type=range]{accent-color:var(--accent)}
 .tip{position:relative;cursor:help;color:var(--accent);font-weight:700;font-size:11px;line-height:1;border:1px solid currentColor;border-radius:999px;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;flex:none}
@@ -52,6 +54,10 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
 </header>
 <div class="card">
   <canvas id="c" width="820" height="400"></canvas>
+  <div class="lc">
+    <div class="lctitle">📈 Learning Curve — Ensemble Accuracy เติบโตตามจำนวนต้นไม้ (เส้นประ = Acc เฉลี่ยต่อต้นเดี่ยว)</div>
+    <canvas id="lc" width="820" height="160"></canvas>
+  </div>
   <div class="controls">
     <button id="train" class="primary">🌲 ฝึก Random Forest</button>
     <button id="rand">สุ่มข้อมูล</button>
@@ -91,6 +97,7 @@ const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
 const C0=[239,68,68], C1=[59,130,246];
 let pts=[], trees=[], trained=0, running=false, timer=null, selC=0;
+let accVsTrees=[];
 function treesN(){return +$('nt').value;}
 function depthN(){return +$('depth').value;}
 
@@ -108,7 +115,7 @@ function genData(n){
 }
 function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
 function inv(c){return {x:(c.x-L)/(W-L-R), y:1-(c.y-T)/(H-T-B)}}
-function reset(){trees=[];trained=0;running=false;clearTimer();$('train').textContent='🌲 ฝึก Random Forest';$('done').textContent='0 / '+treesN();$('acc').textContent='—';setupMinis(treesN());draw();drawMinis();}
+function reset(){trees=[];trained=0;running=false;accVsTrees=[];clearTimer();$('train').textContent='🌲 ฝึก Random Forest';$('done').textContent='0 / '+treesN();$('acc').textContent='—';setupMinis(treesN());draw();drawMinis();}
 
 function gini(arr){
   if(!arr.length)return 0;
@@ -203,6 +210,7 @@ function draw(){
     for(const p of pts)if((ensembleVote(p.x,p.y)>=0.5?1:0)===p.c)ok++;
     $('acc').textContent=(ok/pts.length*100).toFixed(1)+'%';
     $('sacc').textContent=singleAcc().toFixed(1)+'%';
+    drawEnsLC();
   }
   $('done').textContent=trained+' / '+treesN();
 }
@@ -255,12 +263,48 @@ $('train').onclick=()=>{
     for(let i=0;i<pts.length;i++)inds.push(Math.floor(Math.random()*pts.length));
     trees.push(buildTree(inds,0));
     trained++;
+    let ok2=0;
+    for(const p of pts)if((ensembleVote(p.x,p.y)>=0.5?1:0)===p.c)ok2++;
+    accVsTrees.push({n:trained,acc:ok2/pts.length*100});
     draw();drawMinis();
     if(trained>=treesN()){clearTimer();running=false;$('train').textContent='🌲 ฝึก Random Forest';}
   },700);
 };
 function ntSync(){const v=+$('nt').value;$('ntn').value=v;if(running){clearTimer();running=false;$('train').textContent='🌲 ฝึก Random Forest';}reset();}
 function depthSync(){const v=+$('depth').value;$('depthn').value=v;if(running){clearTimer();running=false;$('train').textContent='🌲 ฝึก Random Forest';}reset();}
+function drawEnsLC(){
+  const cc=document.getElementById('lc');
+  if(!cc)return;
+  const x=cc.getContext('2d');
+  const W2=cc.width,H2=cc.height;
+  x.clearRect(0,0,W2,H2);
+  const padL=46,padR=12,padT=22,padB=26;
+  const pw=W2-padL-padR, ph=H2-padT-padB;
+  x.strokeStyle='#e2e8f0';x.lineWidth=1;
+  x.strokeRect(padL,padT,pw,ph);
+  x.fillStyle='#94a3b8';x.font='10px sans-serif';x.textAlign='center';
+  x.fillText('จำนวนต้นไม้',padL+pw/2,H2-8);
+  if(!accVsTrees.length)return;
+  const maxA=Math.max(...accVsTrees.map(d=>d.acc),1e-9);
+  if(trees.length>1){
+    const sa=singleAcc();
+    x.strokeStyle='#94a3b8';x.setLineDash([5,4]);x.lineWidth=1.5;
+    const y=padT+ph*(1-sa/maxA);
+    x.beginPath();x.moveTo(padL,y);x.lineTo(padL+pw,y);x.stroke();x.setLineDash([]);
+    x.fillStyle='#94a3b8';x.textAlign='left';x.font='10px sans-serif';
+    x.fillText('avg ต้นเดี่ยว '+sa.toFixed(1)+'%',padL+4,y-4);
+  }
+  x.strokeStyle='#b45309';x.lineWidth=2.5;x.beginPath();
+  accVsTrees.forEach((d,i)=>{
+    const px2=padL+(d.n-1)/((treesN()-1)||1)*pw;
+    const py=padT+ph*(1-d.acc/maxA);
+    i===0?x.moveTo(px2,py):x.lineTo(px2,py);
+  });
+  x.stroke();
+  const last=accVsTrees[accVsTrees.length-1];
+  x.fillStyle='#b45309';x.textAlign='right';
+  x.fillText('ensemble '+last.acc.toFixed(1)+'%',padL+pw-4,padT+10);
+}
 $('nt').oninput=ntSync;
 $('resetP').onclick=()=>{$('nt').value=5;$('ntn').value=5;$('depth').value=3;$('depthn').value=3;selC=0;$('c0').classList.add('activeCls');$('c1').classList.remove('activeCls');reset();};
 $('ntn').oninput=()=>{let v=Math.round(+$('ntn').value);if(isNaN(v))v=5;v=Math.min(10,Math.max(2,v));$('nt').value=v;ntSync();};

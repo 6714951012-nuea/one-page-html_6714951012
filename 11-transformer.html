@@ -22,6 +22,8 @@ canvas{display:block;border-radius:10px;background:#fafcff;border:1px solid #e2e
 .side .box b{color:var(--accent)}
 .barwrap{height:16px;background:#f1f5f9;border-radius:6px;overflow:hidden;position:relative;margin:3px 0}
 .bar{height:100%;background:linear-gradient(90deg,#fb7185,#e11d48);border-radius:6px}
+.lc{margin-top:16px}
+.lctitle{font-size:13px;color:var(--mut);font-weight:600;margin-bottom:8px}
 .tokchip{display:inline-block;background:#ffe4e6;color:#9f1239;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;margin:2px}
 .controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;align-items:center}
 label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
@@ -74,6 +76,10 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
       </div>
     </div>
   </div>
+  <div class="lc">
+    <div class="lctitle">📈 Learning Curve (ความเข้มข้นของ attention ต่อ token) — 0 = โฟกัสคำเดียว, 1 = กระจายเท่า ๆ กัน</div>
+    <canvas id="lc" width="820" height="150"></canvas>
+  </div>
   <div class="controls">
     <button id="play" class="primary">▶ เล่น</button>
     <button id="step">ขั้นถัดไป</button>
@@ -109,6 +115,7 @@ const rand=(a,b)=>a+Math.random()*(b-a);
 const SENTENCES=[['แมว','นั่ง','บน','เสื่อ'],['AI','เรียน','รู้','ภาษา'],['ฉัน','รัก','การ','เรียนรู้']];
 let D=8, DK=Math.sqrt(D), curSi=0;
 let toks=[], emb={}, Wq,Wk,Wv, Q,K,V, scores, attn, outV, row=0, playing=false, timer=null;
+const entHist=[];
 
 function newWeights(){
   Wq=Array.from({length:D},()=>Array.from({length:D},()=>rand(-0.8,0.8)));
@@ -123,7 +130,7 @@ function setSentence(si){
     if(!emb[t])emb[t]=Array.from({length:D},()=>rand(-1,1));
   }
   newWeights();
-  compute();row=0;
+  compute();row=0;entHist.length=0;
   stop();$('play').textContent='▶ เล่น';
   draw();
 }
@@ -206,9 +213,40 @@ function draw(){
     $('cur').textContent='— เสร็จสิ้นทุก token —';
     $('maxatt').textContent='—';$('sumatt').textContent='—';
   }
+  drawLC();
+}
+function drawLC(){
+  const cc=document.getElementById('lc');
+  if(!cc)return;
+  const x=cc.getContext('2d');
+  const W2=cc.width,H2=cc.height;
+  x.clearRect(0,0,W2,H2);
+  const padL=46,padR=14,padT=22,padB=26;
+  const pw=W2-padL-padR, ph=H2-padT-padB;
+  x.strokeStyle='#e2e8f0';x.lineWidth=1;
+  x.strokeRect(padL,padT,pw,ph);
+  if(!entHist.length)return;
+  const bw=pw/Math.max(1,toks.length);
+  for(let i=0;i<entHist.length;i++){
+    const h=entHist[i]*(ph);
+    x.fillStyle='#e11d48';
+    x.fillRect(padL+i*bw+4,padT+ph-h,bw-8,h);
+    x.fillStyle='#9f1239';x.font='10px sans-serif';x.textAlign='center';
+    x.fillText(entHist[i].toFixed(2),padL+i*bw+bw/2,padT+ph-h-4);
+    x.fillStyle='#64748b';x.font='bold 11px sans-serif';
+    x.fillText(toks[i],padL+i*bw+bw/2,H2-8);
+  }
+  x.fillStyle='#94a3b8';x.font='10px sans-serif';x.textAlign='left';
+  x.fillText('Attention Entropy (ปกติ 0..1) ต่อ token',padL+4,12);
+}
+function entropyOf(arr){
+  let h=0;
+  for(const p of arr){if(p>1e-9)h-=p*Math.log(p);}
+  const n=arr.length;
+  return n>1?h/Math.log(n):0;
 }
 function doStep(){
-  if(row<toks.length){row++;draw();}
+  if(row<toks.length){row++;entHist.push(entropyOf(attn[row-1]));draw();}
   if(row>=toks.length){clearTimer();playing=false;$('play').textContent='▶ เล่น';}
 }
 function clearTimer(){if(timer){clearInterval(timer);timer=null;}}
@@ -227,7 +265,7 @@ $('resetP').onclick=()=>{$('d').value=8;$('dn').value=8;$('temp').value=1;$('tem
 $('dn').oninput=()=>{let v=+$('dn').value;if(isNaN(v))v=8;const opts=[4,8,12,16];let best=opts[0];for(const o of opts)if(Math.abs(o-v)<Math.abs(best-v))best=o;v=best;$('d').value=v;dSync();};
 $('temp').oninput=tempSync;
 $('tempn').oninput=()=>{let v=+$('tempn').value;if(isNaN(v))v=1;v=Math.min(2,Math.max(0.1,v));$('temp').value=v;tempSync();};
-$('reset').onclick=()=>{stop();$('play').textContent='▶ เล่น';newWeights();compute();row=0;draw();};
+$('reset').onclick=()=>{stop();$('play').textContent='▶ เล่น';newWeights();compute();row=0;entHist.length=0;draw();};
 $('s1').onclick=()=>setSentence(0);
 $('s2').onclick=()=>setSentence(1);
 $('s3').onclick=()=>setSentence(2);

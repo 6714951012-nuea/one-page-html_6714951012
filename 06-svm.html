@@ -25,6 +25,8 @@ button.danger{background:#fee2e2;color:#b91c1c}
 .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
 .stat b{color:var(--accent);font-size:15px}
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
+.lc{margin-top:14px}
+.lctitle{font-size:13px;color:var(--mut);font-weight:600;margin-bottom:8px}
 label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
 input[type=range]{accent-color:var(--accent)}
 .tip{position:relative;cursor:help;color:var(--accent);font-weight:700;font-size:11px;line-height:1;border:1px solid currentColor;border-radius:999px;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;flex:none}
@@ -46,6 +48,10 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
 </header>
 <div class="card">
   <canvas id="c" width="820" height="460"></canvas>
+  <div class="lc">
+    <div class="lctitle">📈 Learning Curve — Hinge Loss (แกนซ้าย) กับ Accuracy (แกนขวา) ตาม Step ของ SGD</div>
+    <canvas id="lc" width="820" height="170"></canvas>
+  </div>
   <div class="controls">
     <button id="rand" class="primary">สุ่มข้อมูล</button>
     <button id="train">เริ่มฝึก (Hinge Loss)</button>
@@ -81,6 +87,7 @@ const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
 const C0=[239,68,68], C1=[59,130,246];
 let pts=[], w1=1, w2=1, b=0, running=false, raf=null, steps=0, selClass=0;
+const lossHist=[], accHist=[];
 
 function genData(n){
   pts=[];
@@ -93,7 +100,7 @@ function genData(n){
   }
   resetParams();
 }
-function resetParams(){w1=1;w2=1;b=0;steps=0;stop();$('train').textContent='เริ่มฝึก (Hinge Loss)';}
+function resetParams(){w1=1;w2=1;b=0;steps=0;lossHist.length=0;accHist.length=0;stop();$('train').textContent='เริ่มฝึก (Hinge Loss)';}
 function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
 function inv(c){return {x:(c.x-L)/(W-L-R), y:1-(c.y-T)/(H-T-B)}}
 const f=(p)=>w1*p.x+w2*p.y+b;
@@ -117,6 +124,12 @@ function svCount(){
   let n=0;
   for(const p of pts){const y=p.c===1?1:-1;if(y*f(p)<=1)n++;}
   return n;
+}
+function hingeLoss(){
+  if(!pts.length)return 0;
+  let s=0;
+  for(const p of pts){const y=p.c===1?1:-1;s+=Math.max(0,1-y*f(p));}
+  return s/pts.length;
 }
 
 function lineY(x,val){
@@ -179,11 +192,14 @@ function draw(){
   let mc=0;
   for(const p of pts)if((f(p)>=0?1:0)!==p.c)mc++;
   $('mis').textContent=mc;
+  drawLC();
 }
 
 function loop(){
   if(!running)return;
   for(let i=0;i<250;i++)sgdStep();
+  lossHist.push(hingeLoss());
+  accHist.push(accuracy());
   if(steps>30000){stop();$('train').textContent='เริ่มฝึก (Hinge Loss)';}
   draw();
   raf=requestAnimationFrame(loop);
@@ -193,6 +209,57 @@ function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=null;}
 
 function cSync(){const v=+$('c').value;$('cn').value=v.toFixed(1);resetParams();draw();}
 function lrSync(){const v=+$('lr').value;$('lrn').value=v.toFixed(2);draw();}
+function drawLC(){
+  const cc=document.getElementById('lc');
+  if(!cc)return;
+  const x=cc.getContext('2d');
+  const W2=cc.width,H2=cc.height;
+  x.clearRect(0,0,W2,H2);
+  const padL=52,padR=52,padT=24,padB=30;
+  const pw=W2-padL-padR, ph=H2-padT-padB;
+  x.strokeStyle='#e2e8f0';x.lineWidth=1;
+  x.strokeRect(padL,padT,pw,ph);
+  if(!lossHist.length)return;
+  const loL=Math.max(Math.min(...lossHist),1e-3);
+  const hiL=Math.max(...lossHist,1e-2);
+  const span=Math.log10(hiL)-Math.log10(loL)||1;
+  const yOf=v=>padT+ph*(1-(Math.log10(Math.max(v,loL))-Math.log10(loL))/span);
+  x.font='10px sans-serif';x.textAlign='right';
+  for(let p=Math.floor(Math.log10(hiL));p>=Math.ceil(Math.log10(loL));p--){
+    const v=Math.pow(10,p);
+    const y=yOf(v);
+    x.strokeStyle='#eef2f7';x.beginPath();x.moveTo(padL,y);x.lineTo(padL+pw,y);x.stroke();
+    x.fillStyle='#94a3b8';x.fillText('1e'+p,padL-6,y+3);
+  }
+  const ay=v=>padT+ph*(1-v);
+  x.strokeStyle='#f1f5f9';
+  x.beginPath();x.moveTo(padL,ay(0.5));x.lineTo(padL+pw,ay(0.5));x.stroke();
+  x.fillStyle='#94a3b8';x.textAlign='left';
+  x.fillText('acc 0.5',padL+pw+6,ay(0.5)+3);
+  x.fillText('acc 1.0',padL+pw+6,ay(1)+3);
+  const nMax=Math.max(lossHist.length,accHist.length);
+  if(accHist.length>1){
+    x.strokeStyle='#16a34a';x.lineWidth=2;x.beginPath();
+    accHist.forEach((v,i)=>{const px2=padL+(i/(nMax-1||1))*pw;const py=ay(v/100);i===0?x.moveTo(px2,py):x.lineTo(px2,py);});
+    x.stroke();
+  }
+  if(lossHist.length>1){
+    x.strokeStyle='#dc2626';x.lineWidth=2;x.beginPath();
+    lossHist.forEach((v,i)=>{const px2=padL+(i/(nMax-1||1))*pw;const py=yOf(v);i===0?x.moveTo(px2,py):x.lineTo(px2,py);});
+    x.stroke();
+  }
+  x.textAlign='left';
+  x.fillStyle='#dc2626';x.fillRect(padL+8,8,12,4);
+  x.fillStyle='#64748b';x.fillText('Hinge Loss',padL+24,12);
+  x.fillStyle='#16a34a';x.fillRect(padL+96,8,12,4);
+  x.fillStyle='#64748b';x.fillText('Acc',padL+112,12);
+  x.fillStyle='#94a3b8';x.textAlign='center';
+  x.fillText('step',padL+pw/2,H2-8);
+  x.textAlign='right';x.fillStyle='#dc2626';
+  x.fillText('loss='+(lossHist.length?lossHist[lossHist.length-1].toFixed(3):'—'),padL+pw,H2-8);
+  x.fillStyle='#16a34a';
+  x.fillText('acc='+(accHist.length?accHist[accHist.length-1].toFixed(1)+'%':'—'),padL+pw-110,H2-8);
+}
 $('c').oninput=cSync;
 $('resetP').onclick=()=>{$('c').value=6;$('cn').value=6;$('lr').value=0.05;$('lrn').value=0.05;cSync();lrSync();};
 $('cn').oninput=()=>{let v=+$('cn').value;if(isNaN(v))v=6;v=Math.min(20,Math.max(0.5,v));$('c').value=v;cSync();};

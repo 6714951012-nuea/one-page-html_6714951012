@@ -26,6 +26,8 @@ button.danger{background:#fee2e2;color:#b91c1c}
 .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
 .stat b{color:var(--accent);font-size:15px}
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
+.lc{margin-top:14px}
+.lctitle{font-size:13px;color:var(--mut);font-weight:600;margin-bottom:8px}
 label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
 input[type=range]{accent-color:var(--accent)}
 .tip{position:relative;cursor:help;color:var(--accent);font-weight:700;font-size:11px;line-height:1;border:1px solid currentColor;border-radius:999px;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;flex:none}
@@ -48,6 +50,10 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
 </header>
 <div class="card">
   <canvas id="c" width="820" height="400"></canvas>
+  <div class="lc">
+    <div class="lctitle">📈 Learning Curve (ต้นไม้สร้างทีเดียว — ความแม่นยำตามความลึก) — คลิกแท่งเพื่อเลือกความลึก</div>
+    <canvas id="lc" width="820" height="160"></canvas>
+  </div>
   <div class="controls">
     <button id="play" class="primary">▶ เล่นอัตโนมัติ</button>
     <button id="step">ขั้นถัดไป</button>
@@ -92,6 +98,7 @@ const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
 const C0=[239,68,68], C1=[59,130,246];
 let pts=[], nodes=[], root=null, revealed=0, timer=null, depthCap=4, minS=8, selC=0;
+let depthAcc=[];
 
 function genData(n){
   pts=[];
@@ -118,11 +125,30 @@ function majority(arr){
 }
 function predictAt(x,y){let n=root;while(n&&!n.leaf)n=(n.f==='x'?x:y)<=n.t?n.left:n.right;return n?n.label:0;}
 function selfAcc(){if(!pts.length)return 0;let ok=0;for(const p of pts)if(predictAt(p.x,p.y)===p.c)ok++;return ok/pts.length*100;}
+function accForTree(r){
+  if(!pts.length)return 0;
+  let ok=0;
+  for(const p of pts){let n=r;while(n&&!n.leaf)n=(n.f==='x'?p.x:p.y)<=n.t?n.left:n.right;if(n&&n.label===p.c)ok++;}
+  return ok/pts.length*100;
+}
+function sweepDepth(){
+  const saveN=nodes;
+  const out=[];
+  for(let d=1;d<=6;d++){
+    depthCap=d;
+    nodes=[];
+    const r=buildNode(pts.map((_,i)=>i),0,0,{x0:0,y0:0,x1:1,y1:1});
+    out.push({d:d,acc:accForTree(r)});
+  }
+  depthCap=+$('depth').value;nodes=saveN;
+  return out;
+}
 function build(){
   depthCap=+$('depth').value;minS=+$('mins').value;
   $('md').textContent=depthCap;$('ms').textContent=minS;
   nodes=[];revealed=0;clearTimer();
   root=buildNode(pts.map((_,i)=>i),0,0,{x0:0,y0:0,x1:1,y1:1});
+  depthAcc=sweepDepth();
   $('play').textContent='▶ เล่นอัตโนมัติ';
   $('total').textContent=nodes.length;
   draw();drawTree();
@@ -204,6 +230,7 @@ function draw(){
   $('revealed').textContent=Math.min(revealed,nodes.length);
   $('acc').textContent=root?selfAcc().toFixed(1)+'%':'—';
   $('leaves').textContent=nodes.filter(n=>n.leaf).length;
+  drawDepthAcc();
 }
 
 function drawTree(){
@@ -259,8 +286,42 @@ $('step').onclick=()=>{
 };
 function depthSync(){const v=+$('depth').value;$('dn').value=v;clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';build();}
 function minsSync(){const v=+$('mins').value;$('msn').value=v;clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';build();}
+function drawDepthAcc(){
+  const cc=document.getElementById('lc');
+  if(!cc)return;
+  const x=cc.getContext('2d');
+  const W2=cc.width,H2=cc.height;
+  x.clearRect(0,0,W2,H2);
+  if(!depthAcc.length)return;
+  const maxA=Math.max(...depthAcc.map(d=>d.acc),1e-9);
+  const padL=44,padR=10,padT=16,padB=26;
+  const bw=(W2-padL-padR)/depthAcc.length;
+  for(const d of depthAcc){
+    const h=(d.acc/maxA)*(H2-padT-padB);
+    const bx=padL+(d.d-1)*bw, by=H2-padB-h;
+    x.fillStyle=d.d===+$('depth').value?'#059669':'#a7f3d0';
+    x.fillRect(bx+3,by,bw-6,h);
+    x.fillStyle=d.d===+$('depth').value?'#059669':'#047857';
+    x.font='10px sans-serif';x.textAlign='center';
+    x.fillText(d.acc.toFixed(0)+'%',bx+bw/2,by-4);
+    x.fillStyle=d.d===+$('depth').value?'#059669':'#64748b';
+    x.font='bold 11px sans-serif';
+    x.fillText('depth='+d.d,bx+bw/2,H2-8);
+  }
+  x.fillStyle='#94a3b8';x.font='10px sans-serif';x.textAlign='center';
+  x.fillText('Accuracy (self) ตามความลึก — ลึกเกินไป accuracy อาจลดลง (overfit)',(padL+W2-padR)/2,12);
+}
 $('depth').oninput=depthSync;
 $('resetP').onclick=()=>{$('depth').value=4;$('dn').value=4;$('mins').value=8;$('msn').value=8;selC=0;$('c0').classList.add('activeCls');$('c1').classList.remove('activeCls');build();};
+$('lc').addEventListener('click',e=>{
+  const cc=document.getElementById('lc');
+  const r=cc.getBoundingClientRect();
+  const pxx=(e.clientX-r.left)*(cc.width/r.width);
+  const padL=44,padR=10;
+  const bw=(cc.width-padL-padR)/Math.max(1,depthAcc.length);
+  const dd=Math.floor((pxx-padL)/bw)+1;
+  if(dd>=1&&dd<=6){$('depth').value=dd;$('dn').value=dd;depthSync();}
+});
 $('dn').oninput=()=>{let v=Math.round(+$('dn').value);if(isNaN(v))v=4;v=Math.min(6,Math.max(1,v));$('depth').value=v;depthSync();};
 $('mins').oninput=minsSync;
 $('msn').oninput=()=>{let v=Math.round(+$('msn').value);if(isNaN(v))v=8;v=Math.min(30,Math.max(4,v));$('mins').value=v;minsSync();};
