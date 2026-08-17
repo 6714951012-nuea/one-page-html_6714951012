@@ -21,6 +21,7 @@ button.primary{background:var(--accent);color:#fff}
 button.danger{background:#fee2e2;color:#b91c1c}
 label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
 input[type=range]{accent-color:var(--accent)}
+select{border:1px solid #cbd5e1;border-radius:8px;padding:9px 12px;font-size:14px;background:#fff}
 .stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;font-size:13px}
 .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
 .stat b{color:var(--accent);font-size:15px}
@@ -48,6 +49,10 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
       <input type="range" id="k" min="2" max="6" value="4">
       <b id="kv">4</b>
     </label>
+    <select id="init">
+      <option value="random">Init: Random</option>
+      <option value="kpp">Init: K-Means++</option>
+    </select>
   </div>
   <div class="stats">
     <div class="stat">Iteration: <b id="iter">0</b></div>
@@ -83,8 +88,20 @@ function genData(n){
 function initCentroids(){
   centroids=[];
   assign=new Array(pts.length).fill(0);
-  const shuf=[...pts].sort(()=>Math.random()-0.5);
-  for(let i=0;i<k;i++)centroids.push({x:shuf[i].x,y:shuf[i].y});
+  if($('init').value==='kpp'&&pts.length>=k){
+    // K-Means++: จุดถัดไปสุ่มด้วยความน่าจะเป็น ∝ ระยะทาง² จาก centroid ที่มีอยู่
+    centroids.push({x:pts[Math.floor(Math.random()*pts.length)].x,y:pts[Math.floor(Math.random()*pts.length)].y});
+    while(centroids.length<k){
+      const ds=pts.map(p=>{let bd=1e9;for(const c of centroids){const d=(p.x-c.x)**2+(p.y-c.y)**2;if(d<bd)bd=d;}return bd;});
+      const sum=ds.reduce((a,b)=>a+b,0)||1;
+      let r=Math.random()*sum,pick=ds.length-1;
+      for(let i=0;i<ds.length;i++){r-=ds[i];if(r<=0){pick=i;break;}}
+      centroids.push({x:pts[pick].x,y:pts[pick].y});
+    }
+  }else{
+    const shuf=[...pts].sort(()=>Math.random()-0.5);
+    for(let i=0;i<k;i++)centroids.push({x:shuf[i].x,y:shuf[i].y});
+  }
   iter=0;converged=false;$('state').textContent='ยังไม่ลู่เข้า';
 }
 function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
@@ -193,6 +210,7 @@ $('cent').onclick=()=>{stop();initCentroids();draw();};
 $('rand').onclick=()=>{stop();genData(90);draw();};
 $('reset').onclick=()=>{stop();initCentroids();draw();};
 $('k').oninput=e=>{k=+e.target.value;$('kv').textContent=k;stop();initCentroids();draw();};
+$('init').onchange=()=>{stop();initCentroids();draw();};
 function resetIter(){iter=0;converged=false;}
 
 genData(90);draw();

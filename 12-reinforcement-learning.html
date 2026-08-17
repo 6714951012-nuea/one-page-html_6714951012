@@ -57,6 +57,18 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <label class="slider">ความเร็ว
       <input type="range" id="speed" min="20" max="400" value="120">
     </label>
+    <label class="slider">α (learning rate)
+      <input type="range" id="alpha" min="0.01" max="1" step="0.01" value="0.1">
+      <b id="alphav">0.10</b>
+    </label>
+    <label class="slider">γ (discount)
+      <input type="range" id="gamma" min="0.5" max="0.99" step="0.01" value="0.9">
+      <b id="gammav">0.90</b>
+    </label>
+    <label class="slider">ε เริ่มต้น
+      <input type="range" id="eps0" min="0.05" max="0.5" step="0.05" value="0.3">
+      <b id="eps0v">0.30</b>
+    </label>
   </div>
 </div>
 <div class="info">
@@ -75,7 +87,7 @@ const EMPTY=0, WALL=1, GOAL=2, TRAP=3;
 const ACTS=[[0,-1],[0,1],[-1,0],[1,0]]; // up down left right
 const ANAME=['↑','↓','←','→'];
 let grid=[], Q, cx, cy, spos=[7,0], episode=0, rewardSum=0, path=[], rewards=[], running=false, raf=null, lastStep=0;
-const ALPHA=0.1, GAMMA=0.9;
+
 
 function reachable(g){
   const seen=new Set();
@@ -118,7 +130,8 @@ function startEpisode(){
   cx=spos[0];cy=spos[1];path=[[cx,cy]];rewardSum=0;
 }
 function step(){
-  const eps=Math.max(0.05,0.3-episode*0.0002);
+  const alpha=+$('alpha').value, gamma=+$('gamma').value;
+  const eps=Math.max(0.05,+$('eps0').value-episode*0.0002);
   const s=Q[cy][cx];
   let a;
   if(Math.random()<eps){
@@ -143,7 +156,7 @@ function step(){
     r=-1;done=true;
   }
   const best=Math.max(...Q[ny][nx]);
-  Q[cy][cx][a]+=ALPHA*(r+GAMMA*best-Q[cy][cx][a]);
+  Q[cy][cx][a]+=alpha*(r+gamma*best-Q[cy][cx][a]);
   cx=nx;cy=ny;
   rewardSum+=r;
   path.push([cx,cy]);
@@ -213,7 +226,7 @@ function draw(){
   ctx.fillText('🟣 = agent   ★ = เป้าหมาย (+1)   ✕ = กับดัก (−1)   ■ = กำแพง',10,canvas.height-6);
 
   $('ep').textContent=episode;
-  $('eps').textContent=Math.max(0.05,0.3-episode*0.0002).toFixed(3);
+  $('eps').textContent=Math.max(0.05,+$('eps0').value-episode*0.0002).toFixed(3);
   const last20=rewards.slice(-20);
   $('avg').textContent=last20.length? (last20.reduce((a,b)=>a+b,0)/last20.length).toFixed(2):'—';
   drawChart();
@@ -255,6 +268,9 @@ $('play').onclick=()=>running?stop():start();
 $('resetQ').onclick=()=>{stop();resetQ();draw();};
 $('maze').onclick=()=>{stop();newMaze();resetQ();draw();};
 $('speed').oninput=()=>{};
+$('alpha').oninput=e=>{$('alphav').textContent=(+e.target.value).toFixed(2);};
+$('gamma').oninput=e=>{$('gammav').textContent=(+e.target.value).toFixed(2);};
+$('eps0').oninput=e=>{$('eps0v').textContent=(+e.target.value).toFixed(2);};
 
 newMaze();resetQ();draw();
 </script>

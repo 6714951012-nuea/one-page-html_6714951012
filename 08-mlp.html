@@ -25,6 +25,8 @@ button.pat.active{background:var(--accent);border-color:var(--accent);color:#fff
 .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
 .stat b{color:var(--accent);font-size:15px}
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
+label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+input[type=range]{accent-color:var(--accent)}
 .info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
 .info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
 code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
@@ -45,6 +47,14 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <button id="p01" class="pat">(0,1)</button>
     <button id="p10" class="pat">(1,0)</button>
     <button id="p11" class="pat">(1,1)</button>
+    <label class="slider">Hidden neurons
+      <input type="range" id="hn" min="2" max="8" value="4">
+      <b id="hnv">4</b>
+    </label>
+    <label class="slider">Learning rate
+      <input type="range" id="lr" min="0.1" max="1.5" step="0.05" value="0.6">
+      <b id="lrv">0.6</b>
+    </label>
     <span class="hint">💡 คลิกที่ปุ่มอินพุต หรือคลิกที่วงกลมอินพุตเพื่อทดสอบ forward pass</span>
   </div>
   <div class="stats">
@@ -65,13 +75,14 @@ const W=canvas.width,H=canvas.height;
 const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
 const patterns=[[0,0,0],[0,1,1],[1,0,1],[1,1,0]];
-let W1,b1,W2,b2, sel=[0,0], running=false, raf=null, epoch=0, lr=0.6;
+let W1,b1,W2,b2, sel=[0,0], running=false, raf=null, epoch=0, HN=4;
 const lossHist=[];
 
 function initW(){
-  W1=Array.from({length:4},()=>[rand(-1,1),rand(-1,1)]);
-  b1=[rand(-1,1),rand(-1,1),rand(-1,1),rand(-1,1)];
-  W2=Array.from({length:4},()=>rand(-1,1));
+  HN=+$('hn').value;
+  W1=Array.from({length:HN},()=>[rand(-1,1),rand(-1,1)]);
+  b1=Array.from({length:HN},()=>rand(-1,1));
+  W2=Array.from({length:HN},()=>rand(-1,1));
   b2=rand(-1,1);
   epoch=0;lossHist.length=0;stop();$('train').textContent='▶ ฝึก (Backprop)';
 }
@@ -87,13 +98,14 @@ function mseLoss(){
   return s/4;
 }
 function trainEpoch(){
+  const lr=+$('lr').value;
   for(const [a,b,t] of patterns){
     const {h,o}=forward([a,b]);
     const e=o-t;
     const dO=e*o*(1-o);
-    for(let i=0;i<4;i++){W2[i]-=lr*dO*h[i];}
+    for(let i=0;i<HN;i++){W2[i]-=lr*dO*h[i];}
     b2-=lr*dO;
-    for(let i=0;i<4;i++){
+    for(let i=0;i<HN;i++){
       const dh=dO*W2[i]*h[i]*(1-h[i]);
       W1[i][0]-=lr*dh*a;W1[i][1]-=lr*dh*b;b1[i]-=lr*dh;
     }
@@ -103,25 +115,26 @@ function trainEpoch(){
 
 // layout
 const nX=[90,90], nHx=320, nOx=505;
-const nY=[110,230], nHy=[40,120,200,280], nOy=170;
+const nY=[110,230], nOy=170;
+function hy(i){return HN>1?40+i*(240/(HN-1)):160;}
 const RX=24,RH=22,RO=28;
 
 function draw(){
   ctx.clearRect(0,0,W,H);
   // edges W1
-  for(let i=0;i<4;i++){
+  for(let i=0;i<HN;i++){
     for(let j=0;j<2;j++){
-      edge(nX[j],nY[j],nHx,nHy[i],W1[i][j]);
+      edge(nX[j],nY[j],nHx,hy(i),W1[i][j]);
     }
   }
   // edges W2
-  for(let i=0;i<4;i++){
-    edge(nHx,nHy[i],nOx,nOy,W2[i]);
+  for(let i=0;i<HN;i++){
+    edge(nHx,hy(i),nOx,nOy,W2[i]);
   }
   // hidden nodes
   const {h,o}=forward(sel);
-  for(let i=0;i<4;i++){
-    node(nHx,nHy[i],RH,h[i],'h'+i);
+  for(let i=0;i<HN;i++){
+    node(nHx,hy(i),RH,h[i],'h'+i);
   }
   // inputs
   for(let j=0;j<2;j++){
@@ -189,6 +202,8 @@ function loop(){
 function start(){running=true;$('train').textContent='⏸ หยุด';if(raf)cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
 function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=null;}
 
+$('hn').oninput=e=>{$('hnv').textContent=e.target.value;initW();draw();};
+$('lr').oninput=e=>{$('lrv').textContent=(+e.target.value).toFixed(2);};
 $('train').onclick=()=>{running?stop():start();};
 $('resetW').onclick=()=>{initW();draw();};
 $('p00').onclick=()=>setSel(0,0,$('p00'));

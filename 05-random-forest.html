@@ -28,6 +28,8 @@ button.danger{background:#fee2e2;color:#b91c1c}
 .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
 .stat b{color:var(--accent);font-size:15px}
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
+label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+input[type=range]{accent-color:var(--accent)}
 .info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
 .info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
 code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
@@ -45,6 +47,14 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <button id="train" class="primary">🌲 ฝึก Random Forest</button>
     <button id="rand">สุ่มข้อมูล</button>
     <button id="reset" class="danger">รีเซ็ต</button>
+    <label class="slider">จำนวนต้นไม้
+      <input type="range" id="nt" min="2" max="10" value="5">
+      <b id="ntv">5</b>
+    </label>
+    <label class="slider">ความลึกสูงสุด
+      <input type="range" id="depth" min="2" max="5" value="3">
+      <b id="depthv">3</b>
+    </label>
     <span class="hint">ต้นไม้แต่ละต้นโหวต แล้วรวมกันเป็นคำตอบสุดท้าย</span>
   </div>
   <div class="stats">
@@ -67,8 +77,9 @@ const L=58,R=20,T=26,B=46;
 const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
 const C0=[239,68,68], C1=[59,130,246];
-const MTREES=5;
 let pts=[], trees=[], trained=0, running=false, timer=null;
+function treesN(){return +$('nt').value;}
+function depthN(){return +$('depth').value;}
 
 function genData(n){
   pts=[];
@@ -83,7 +94,7 @@ function genData(n){
   reset();
 }
 function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
-function reset(){trees=[];trained=0;running=false;clearTimer();$('train').textContent='🌲 ฝึก Random Forest';$('done').textContent='0 / '+MTREES;$('acc').textContent='—';setupMinis();draw();drawMinis();}
+function reset(){trees=[];trained=0;running=false;clearTimer();$('train').textContent='🌲 ฝึก Random Forest';$('done').textContent='0 / '+treesN();$('acc').textContent='—';setupMinis(treesN());draw();drawMinis();}
 
 function gini(arr){
   if(!arr.length)return 0;
@@ -92,7 +103,7 @@ function gini(arr){
 }
 function buildTree(inds,depth){
   const node={leaf:false,left:null,right:null,f:null,t:null,label:0};
-  if(depth>=3||inds.length<4||gini(inds)<1e-6){
+  if(depth>=depthN()||inds.length<4||gini(inds)<1e-6){
     node.leaf=true;
     node.label=inds.filter(i=>pts[i].c===1).length>=inds.length/2?1:0;
     return node;
@@ -168,7 +179,7 @@ function draw(){
     for(const p of pts)if((ensembleVote(p.x,p.y)>=0.5?1:0)===p.c)ok++;
     $('acc').textContent=(ok/pts.length*100).toFixed(1)+'%';
   }
-  $('done').textContent=trained+' / '+MTREES;
+  $('done').textContent=trained+' / '+treesN();
 }
 
 function drawMinis(){
@@ -198,9 +209,9 @@ function drawMinis(){
     }
   }
 }
-function setupMinis(){
+function setupMinis(n){
   const row=$('minis');row.innerHTML='';
-  for(let i=0;i<MTREES;i++){
+  for(let i=0;i<n;i++){
     const d=document.createElement('div');d.className='mini';
     const c=document.createElement('canvas');c.width=150;c.height=110;
     const p=document.createElement('p');p.textContent='ต้นไม้ที่ '+(i+1);
@@ -211,7 +222,7 @@ function clearTimer(){if(timer){clearInterval(timer);timer=null;}}
 
 $('train').onclick=()=>{
   if(running){clearTimer();running=false;$('train').textContent='🌲 ฝึก Random Forest';return;}
-  if(trained>=MTREES){reset();}
+  if(trained>=treesN()){reset();}
   running=true;$('train').textContent='⏸ หยุด';
   timer=setInterval(()=>{
     // bootstrap sample
@@ -220,9 +231,11 @@ $('train').onclick=()=>{
     trees.push(buildTree(inds,0));
     trained++;
     draw();drawMinis();
-    if(trained>=MTREES){clearTimer();running=false;$('train').textContent='🌲 ฝึก Random Forest';}
+    if(trained>=treesN()){clearTimer();running=false;$('train').textContent='🌲 ฝึก Random Forest';}
   },700);
 };
+$('nt').oninput=()=>{$('ntv').textContent=$('nt').value;if(running){clearTimer();running=false;$('train').textContent='🌲 ฝึก Random Forest';}reset();};
+$('depth').oninput=()=>{$('depthv').textContent=$('depth').value;if(running){clearTimer();running=false;$('train').textContent='🌲 ฝึก Random Forest';}reset();};
 $('rand').onclick=()=>{genData(110);};
 $('reset').onclick=()=>{reset();};
 

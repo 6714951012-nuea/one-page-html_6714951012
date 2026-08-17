@@ -33,6 +33,7 @@ One-page HTML interactive visualizations of machine learning algorithms — แ�
 ## ✨ ฟีเจอร์
 
 - 🖱️ Interactive — คลิก/ลาก/เลื่อนเมาส์บนกราฟเพื่อสร้างข้อมูลเองได้
+- 🎛️ Parameter Tuning — ปรับพารามิเตอร์ของทุกอัลกอริทึมได้ (learning rate, k, depth, C, hidden size, d_model, α/γ/ε ฯลฯ)
 - 📊 Visualize กลไกของแต่ละอัลกอริทึมแบบทีละขั้นตอน (gradient descent, split, attention, Q-table ฯลฯ)
 - 🇹🇭 คำอธิบายภาษาไทยในทุกไฟล์
 - 📦 ไม่มี dependency ภายนอก — ใช้แค่ HTML + CSS + JavaScript (Canvas)

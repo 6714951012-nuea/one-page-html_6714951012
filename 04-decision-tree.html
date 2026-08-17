@@ -24,6 +24,8 @@ button.danger{background:#fee2e2;color:#b91c1c}
 .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
 .stat b{color:var(--accent);font-size:15px}
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
+label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+input[type=range]{accent-color:var(--accent)}
 .info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
 .info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
 code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
@@ -42,12 +44,21 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <button id="step">ขั้นถัดไป</button>
     <button id="rand">สุ่มข้อมูล</button>
     <button id="reset" class="danger">รีเซ็ต</button>
+    <label class="slider">ความลึกสูงสุด
+      <input type="range" id="depth" min="1" max="6" value="4">
+      <b id="dv">4</b>
+    </label>
+    <label class="slider">Min samples/ใบ
+      <input type="range" id="mins" min="4" max="30" value="8">
+      <b id="msv">8</b>
+    </label>
     <span class="hint">กด "ขั้นถัดไป" เพื่อดูต้นไม้สร้างทีละกิ่ง</span>
   </div>
   <div class="stats">
     <div class="stat">โหนดที่สร้างแล้ว: <b id="revealed">0</b></div>
     <div class="stat">โหนดทั้งหมด: <b id="total">0</b></div>
-    <div class="stat">ความลึกสูงสุด: <b>4</b></div>
+    <div class="stat">ความลึกสูงสุด: <b id="md">4</b></div>
+    <div class="stat">Min samples/ใบ: <b id="ms">8</b></div>
   </div>
 </div>
 <div class="card">
@@ -66,7 +77,7 @@ const L=58,R=20,T=26,B=46;
 const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
 const C0=[239,68,68], C1=[59,130,246];
-let pts=[], nodes=[], root=null, revealed=0, timer=null;
+let pts=[], nodes=[], root=null, revealed=0, timer=null, depthCap=4, minS=8;
 
 function genData(n){
   pts=[];
@@ -91,6 +102,8 @@ function majority(arr){
   return c1>=arr.length/2?1:0;
 }
 function build(){
+  depthCap=+$('depth').value;minS=+$('mins').value;
+  $('md').textContent=depthCap;$('ms').textContent=minS;
   nodes=[];revealed=0;clearTimer();
   root=buildNode(pts.map((_,i)=>i),0,0,{x0:0,y0:0,x1:1,y1:1});
   $('play').textContent='▶ เล่นอัตโนมัติ';
@@ -99,7 +112,7 @@ function build(){
 }
 function buildNode(inds,depth,idx,region){
   const node={depth,idx,region,leaf:false,left:null,right:null,f:null,t:null,label:0};
-  if(depth>=4||inds.length<8||gini(inds)<1e-6){
+  if(depth>=depthCap||inds.length<minS||gini(inds)<1e-6){
     node.leaf=true;node.label=majority(inds);
     nodes.push(node);return node;
   }
@@ -225,6 +238,8 @@ $('step').onclick=()=>{
   clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';
   if(revealed<nodes.length){revealed++;draw();drawTree();}
 };
+$('depth').oninput=()=>{$('dv').textContent=$('depth').value;clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';build();};
+$('mins').oninput=()=>{$('msv').textContent=$('mins').value;clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';build();};
 $('rand').onclick=()=>{genData(110);};
 $('reset').onclick=()=>{revealed=0;clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';draw();drawTree();};
 

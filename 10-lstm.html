@@ -23,6 +23,8 @@ button.danger{background:#fee2e2;color:#b91c1c}
 .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
 .stat b{color:var(--accent);font-size:15px}
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
+label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+input[type=range]{accent-color:var(--accent)}
 .info{max-width:920px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
 .info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
 code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
@@ -40,6 +42,10 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <button id="play" class="primary">▶ เล่น (ทีละ timestep)</button>
     <button id="step">ขั้นถัดไป</button>
     <button id="reset" class="danger">สุ่มน้ำหนักใหม่</button>
+    <label class="slider">Hidden size
+      <input type="range" id="hsize" min="2" max="6" value="4">
+      <b id="hsv">4</b>
+    </label>
     <span class="hint">ลำดับอินพุต: H → e → l → l → o → !</span>
   </div>
   <div class="stats">
@@ -64,13 +70,15 @@ const chart=document.getElementById('chart'), cctx=chart.getContext('2d');
 const W=canvas.width,H=canvas.height;
 const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
-const CHARS=['H','e','l','o','!'], D=CHARS.length, NH=4, DIN=D+NH;
+const CHARS=['H','e','l','o','!'], D=CHARS.length;
+let NH=4, DIN=D+NH;
 const seq=['H','e','l','l','o','!'];
 let Wf,Wi,Wg,Wo, bf,bi,bg,bo;
 let hPrev,cPrev, hNow,cNow, gateVals={}, stepIdx=0, playing=false, timer=null;
 const hist=[];
 
 function initWeights(){
+  NH=+$('hsize').value;DIN=D+NH;
   const mk=()=>Array.from({length:NH},()=>Array.from({length:DIN},()=>rand(-0.6,0.6)));
   const mb=()=>Array.from({length:NH},()=>rand(-0.2,0.2));
   Wf=mk();Wi=mk();Wg=mk();Wo=mk();
@@ -183,7 +191,7 @@ function drawChart(){
   cctx.strokeStyle='#e2e8f0';cctx.lineWidth=1;
   cctx.beginPath();cctx.moveTo(0,chart.height/2);cctx.lineTo(chart.width,chart.height/2);cctx.stroke();
   if(hist.length<2)return;
-  const colors=['#ef4444','#3b82f6','#10b981','#f59e0b'];
+  const colors=['#ef4444','#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899'];
   for(let u=0;u<NH;u++){
     cctx.strokeStyle=colors[u];cctx.lineWidth=2;cctx.beginPath();
     hist.forEach((h,i)=>{
@@ -221,6 +229,7 @@ $('play').onclick=()=>{
   timer=setInterval(doStep,900);
 };
 $('step').onclick=()=>{stop();$('play').textContent='▶ เล่น (ทีละ timestep)';doStep();};
+$('hsize').oninput=()=>{$('hsv').textContent=$('hsize').value;initWeights();draw();};
 $('reset').onclick=()=>{initWeights();draw();};
 
 initWeights();draw();

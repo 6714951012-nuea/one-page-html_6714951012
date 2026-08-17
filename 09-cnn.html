@@ -71,6 +71,10 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
       <option value="blur">Blur (เบลอ)</option>
       <option value="diag">Diagonal (เส้นทแยง)</option>
     </select>
+    <select id="pselect">
+      <option value="max" selected>Max Pooling</option>
+      <option value="avg">Average Pooling</option>
+    </select>
     <label class="check"><input type="checkbox" id="relu" checked> ใช้ ReLU (ค่าลบ→0)</label>
   </div>
   <div class="stats">
@@ -115,10 +119,10 @@ function computeAll(){
   const useReLU=$('relu').checked;
   fmShow=fm.map(row=>row.map(v=>useReLU?Math.max(0,v):v));
   pooled=Array.from({length:POOL},()=>new Array(POOL).fill(0));
+  const poolMode=$('pselect').value;
   for(let i=0;i<POOL;i++)for(let j=0;j<POOL;j++){
-    let mx=-1e9;
-    for(let u=0;u<2;u++)for(let v=0;v<2;v++)mx=Math.max(mx,fmShow[i*2+u][j*2+v]);
-    pooled[i][j]=mx;
+    const vals=[fmShow[i*2][j*2],fmShow[i*2][j*2+1],fmShow[i*2+1][j*2],fmShow[i*2+1][j*2+1]];
+    pooled[i][j]=poolMode==='max'?Math.max(...vals):vals.reduce((a,b)=>a+b,0)/4;
   }
 }
 function cellStyle(v,maxA){
@@ -216,6 +220,7 @@ $('step').onclick=()=>{
 $('img').onclick=()=>{clearTimer();playing=false;$('play').textContent='▶ เล่น';randImg();drawAll();};
 $('reset').onclick=()=>{clearTimer();playing=false;$('play').textContent='▶ เล่น';pos=0;drawAll();};
 $('kselect').onchange=e=>{kid=e.target.value;clearTimer();playing=false;$('play').textContent='▶ เล่น';computeAll();pos=0;drawAll();};
+$('pselect').onchange=()=>{clearTimer();playing=false;$('play').textContent='▶ เล่น';computeAll();pos=0;drawAll();};
 $('relu').onchange=()=>{computeAll();drawAll();};
 
 randImg();drawAll();

@@ -23,6 +23,8 @@ button.danger{background:#fee2e2;color:#b91c1c}
 .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
 .stat b{color:var(--accent);font-size:15px}
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
+label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+input[type=range]{accent-color:var(--accent)}
 .info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
 .info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
 code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
@@ -40,6 +42,10 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <button id="rand" class="primary">สุ่มข้อมูล</button>
     <button id="train">เริ่ม Gradient Descent</button>
     <button id="clear" class="danger">ล้างทั้งหมด</button>
+    <label class="slider">Learning rate
+      <input type="range" id="lr" min="0.05" max="2" step="0.05" value="0.55">
+      <b id="lrv">0.55</b>
+    </label>
     <span class="hint">💡 คลิกบนกราฟเพื่อเพิ่มจุดเอง</span>
   </div>
   <div class="stats">
@@ -58,7 +64,7 @@ const W=canvas.width,H=canvas.height;
 const L=58,R=20,T=26,B=46;
 const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
-let points=[], m=0, b=0, running=false, raf=null, steps=0;
+let points=[], m=0, b=0, running=false, raf=null, steps=0, diverged=false;
 const lossHist=[];
 
 function genData(n){
@@ -70,7 +76,7 @@ function genData(n){
   }
   resetParams();
 }
-function resetParams(){m=0;b=0;steps=0;lossHist.length=0;stop();$('train').textContent='เริ่ม Gradient Descent';}
+function resetParams(){m=0;b=0;steps=0;lossHist.length=0;diverged=false;stop();$('train').textContent='เริ่ม Gradient Descent';}
 function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
 function inv(c){return {x:(c.x-L)/(W-L-R), y:1-(c.y-T)/(H-T-B)}}
 
@@ -79,7 +85,7 @@ function mse(){
   let s=0;for(const p of points){const e=m*p.x+b-p.y;s+=e*e;}return s/points.length;
 }
 function sgdStep(){
-  const lr=0.55;
+  const lr=+$('lr').value;
   let dm=0,db=0;
   for(const p of points){const e=m*p.x+b-p.y;dm+=-2*p.x*e;db+=-2*e;}
   dm/=points.length;db/=points.length;
@@ -157,21 +163,24 @@ function draw(){
   }
 
   $('eq').textContent='y = '+m.toFixed(3)+'x + '+b.toFixed(3);
-  $('loss').textContent=points.length?mse().toFixed(4):'—';
+  $('loss').textContent=(diverged?'∞ ลู่ออก! ':'')+(points.length?mse().toFixed(4):'—');
   $('n').textContent=points.length;
 }
 
 function loop(){
   if(!running)return;
   for(let i=0;i<25;i++){sgdStep();steps++;}
-  lossHist.push(mse());
-  if(mse()<0.00035||steps>4000){stop();$('train').textContent='เริ่ม Gradient Descent';}
+  const cur=mse();
+  lossHist.push(cur);
+  if(cur>1e4){diverged=true;stop();$('train').textContent='เริ่ม Gradient Descent';}
+  else if(cur<0.00035||steps>4000){stop();$('train').textContent='เริ่ม Gradient Descent';}
   draw();
   raf=requestAnimationFrame(loop);
 }
 function start(){if(!points.length)return;running=true;$('train').textContent='⏸ หยุด';if(raf)cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
 function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=null;}
 
+$('lr').oninput=e=>{$('lrv').textContent=(+e.target.value).toFixed(2);};
 $('rand').onclick=()=>{genData(24);draw();};
 $('train').onclick=()=>{if(running){stop();$('train').textContent='เริ่ม Gradient Descent';}else{resetParams();start();}};
 $('clear').onclick=()=>{points=[];resetParams();draw();};

@@ -22,6 +22,8 @@ canvas{display:block;border-radius:10px;background:#fafcff;border:1px solid #e2e
 .bar{height:100%;background:linear-gradient(90deg,#fb7185,#e11d48);border-radius:6px}
 .tokchip{display:inline-block;background:#ffe4e6;color:#9f1239;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;margin:2px}
 .controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;align-items:center}
+label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+input[type=range]{accent-color:var(--accent)}
 button{border:none;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;background:#e2e8f0;color:#0f172a;transition:.15s}
 button:hover{filter:brightness(.96)}
 button.primary{background:var(--accent);color:#fff}
@@ -71,10 +73,18 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <button id="s1">แมว นั่ง บน เสื่อ</button>
     <button id="s2">AI เรียน รู้ ภาษา</button>
     <button id="s3">ฉัน รัก การ เรียนรู้</button>
+    <label class="slider">d_model
+      <input type="range" id="d" min="4" max="16" step="4" value="8">
+      <b id="dvv">8</b>
+    </label>
+    <label class="slider">Temperature
+      <input type="range" id="temp" min="0.1" max="2" step="0.1" value="1">
+      <b id="tv">1.0</b>
+    </label>
   </div>
   <div class="stats">
     <div class="stat">token ที่กำลังประมวลผล: <b id="cur">—</b></div>
-    <div class="stat">d<sub>model</sub> = <b>8</b></div>
+    <div class="stat">d<sub>model</sub> = <b id="dv">8</b></div>
   </div>
 </div>
 <div class="info">
@@ -86,7 +96,7 @@ const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
 const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
 const SENTENCES=[['แมว','นั่ง','บน','เสื่อ'],['AI','เรียน','รู้','ภาษา'],['ฉัน','รัก','การ','เรียนรู้']];
-const D=8, DK=Math.sqrt(D);
+let D=8, DK=Math.sqrt(D), curSi=0;
 let toks=[], emb={}, Wq,Wk,Wv, Q,K,V, scores, attn, outV, row=0, playing=false, timer=null;
 
 function newWeights(){
@@ -95,6 +105,7 @@ function newWeights(){
   Wv=Array.from({length:D},()=>Array.from({length:D},()=>rand(-0.8,0.8)));
 }
 function setSentence(si){
+  curSi=si;
   toks=SENTENCES[si];
   emb={};
   for(const t of toks){
@@ -107,9 +118,9 @@ function setSentence(si){
 }
 function matVec(M,v){return M.map(r=>r.reduce((s,x,i)=>s+x*v[i],0));}
 function dot(a,b){return a.reduce((s,v,i)=>s+v*b[i],0);}
-function softmaxRow(v){
+function softmaxRow(v,T){
   const mx=Math.max(...v);
-  const e=v.map(x=>Math.exp(x-mx));
+  const e=v.map(x=>Math.exp((x-mx)/T));
   const s=e.reduce((a,b)=>a+b,0);
   return e.map(x=>x/s);
 }
@@ -120,7 +131,7 @@ function compute(){
   V=toks.map(t=>matVec(Wv,emb[t]));
   scores=[];
   for(let i=0;i<n;i++)scores.push(K.map(k=>dot(Q[i],k)/DK));
-  attn=scores.map(softmaxRow);
+  attn=scores.map(r=>softmaxRow(r,+$('temp').value));
   outV=attn.map((a,i)=>V[0].map((_,d)=>a.reduce((s,w,j)=>s+w*V[j][d],0)));
 }
 
@@ -195,6 +206,8 @@ $('play').onclick=()=>{
   timer=setInterval(doStep,1000);
 };
 $('step').onclick=()=>{stop();$('play').textContent='▶ เล่น';doStep();};
+$('d').oninput=e=>{D=+e.target.value;DK=Math.sqrt(D);$('dvv').textContent=D;$('dv').textContent=D;setSentence(curSi);};
+$('temp').oninput=e=>{$('tv').textContent=(+e.target.value).toFixed(1);compute();draw();};
 $('reset').onclick=()=>{stop();$('play').textContent='▶ เล่น';newWeights();compute();row=0;draw();};
 $('s1').onclick=()=>setSentence(0);
 $('s2').onclick=()=>setSentence(1);

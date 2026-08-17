@@ -22,6 +22,7 @@ button.danger{background:#fee2e2;color:#b91c1c}
 button.activeCls{border:3px solid #0f172a}
 label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
 input[type=range]{accent-color:var(--accent)}
+select{border:1px solid #cbd5e1;border-radius:8px;padding:9px 12px;font-size:14px;background:#fff}
 .stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;font-size:13px}
 .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
 .stat b{color:var(--accent);font-size:15px}
@@ -48,6 +49,10 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
       <input type="range" id="k" min="1" max="15" value="5">
       <b id="kv">5</b>
     </label>
+    <select id="metric" title="ระยะทาง">
+      <option value="euclid">Euclidean</option>
+      <option value="manhattan">Manhattan</option>
+    </select>
     <span class="hint">💡 เลื่อนเมาส์เพื่อทดสอบจุดใหม่ • คลิกเพื่อเพิ่มจุด</span>
   </div>
   <div class="stats">
@@ -66,7 +71,7 @@ const L=58,R=20,T=26,B=46;
 const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
 const C0=[239,68,68], C1=[59,130,246];
-let pts=[], k=5, q=null, selClass=0;
+let pts=[], k=5, q=null, selClass=0, metric='euclid';
 let boundGrid=[];
 
 function genData(n){
@@ -83,9 +88,10 @@ function genData(n){
 function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
 function inv(c){return {x:(c.x-L)/(W-L-R), y:1-(c.y-T)/(H-T-B)}}
 
+function d2(a,b){return metric==='manhattan'?(Math.abs(a.x-b.x)+Math.abs(a.y-b.y)):(a.x-b.x)**2+(a.y-b.y)**2;}
 function classify(p){
   if(!pts.length)return null;
-  const ds=pts.map((pt,i)=>({i,d:(pt.x-p.x)**2+(pt.y-p.y)**2})).sort((a,b)=>a.d-b.d);
+  const ds=pts.map((pt,i)=>({i,d:d2(pt,p)})).sort((a,b)=>a.d-b.d);
   const nn=ds.slice(0,k);
   let v0=0,v1=0;
   for(const x of nn){pts[x.i].c===0?v0++:v1++;}
@@ -140,10 +146,15 @@ function draw(){
     const r=classify(q);
     if(r&&r.nn.length){
       const kth=px(pts[r.nn[r.nn.length-1].i]);
-      const rad=Math.hypot(qc.x-kth.x,qc.y-kth.y);
-      // circle to k-th neighbor
-      ctx.beginPath();ctx.arc(qc.x,qc.y,rad,0,Math.PI*2);
-      ctx.strokeStyle='rgba(15,23,42,.35)';ctx.setLineDash([5,4]);ctx.lineWidth=1.5;ctx.stroke();ctx.setLineDash([]);
+      // วงรอบเพื่อนบ้านที่ k (Euclidean=วงกลม, Manhattan=สี่เหลี่ยม)
+      ctx.strokeStyle='rgba(15,23,42,.35)';ctx.setLineDash([5,4]);ctx.lineWidth=1.5;
+      if(metric==='manhattan'){
+        const dx=Math.abs(qc.x-kth.x), dy=Math.abs(qc.y-kth.y);
+        ctx.beginPath();ctx.moveTo(qc.x,qc.y-dy);ctx.lineTo(qc.x+dx,qc.y);ctx.lineTo(qc.x,qc.y+dy);ctx.lineTo(qc.x-dx,qc.y);ctx.closePath();ctx.stroke();
+      }else{
+        ctx.beginPath();ctx.arc(qc.x,qc.y,Math.hypot(qc.x-kth.x,qc.y-kth.y),0,Math.PI*2);ctx.stroke();
+      }
+      ctx.setLineDash([]);
       // lines to neighbors
       ctx.lineWidth=1;
       for(const x of r.nn){
@@ -191,6 +202,7 @@ canvas.addEventListener('click',e=>{
 $('rand').onclick=()=>{genData(36);draw();};
 $('clear').onclick=()=>{pts=[];computeBoundary();draw();};
 $('k').oninput=e=>{k=+e.target.value;$('kv').textContent=k;computeBoundary();draw();};
+$('metric').onchange=e=>{metric=e.target.value;computeBoundary();draw();};
 $('cls0').onclick=()=>{selClass=0;$('cls0').classList.add('activeCls');$('cls1').classList.remove('activeCls');};
 $('cls1').onclick=()=>{selClass=1;$('cls1').classList.add('activeCls');$('cls0').classList.remove('activeCls');};
 
