@@ -29,6 +29,8 @@ select{border:1px solid #cbd5e1;border-radius:8px;padding:9px 12px;font-size:14p
 .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
 .stat b{color:var(--accent);font-size:15px}
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
+.elbow{margin-top:16px}
+.etitle{font-size:13px;color:var(--mut);font-weight:600;margin-bottom:8px}
 .info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
 .info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
 code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
@@ -50,21 +52,25 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <button id="rand">สุ่มข้อมูล</button>
     <button id="reset" class="danger">รีเซ็ต</button>
     <label class="slider">k =
-      <input type="range" id="k" min="2" max="6" value="4">
-      <input type="number" id="kn" class="num" min="2" max="6" step="1" value="4">
+      <input type="range" id="k" min="1" max="8" value="4">
+      <input type="number" id="kn" class="num" min="1" max="8" step="1" value="4">
     </label>
     <select id="init">
       <option value="random">Init: Random</option>
       <option value="kpp">Init: K-Means++</option>
     </select>
     <button id="resetP" class="danger">↺ ค่าเริ่มต้น</button>
-    <span class="hint">💡 คลิกบนกราฟเพื่อเพิ่มจุดเอง</span>
+    <span class="hint">💡 คลิกบนกราฟเพิ่มจุดเอง • คลิกแท่ง Elbow ด้านล่างเพื่อเลือก k</span>
   </div>
   <div class="stats">
     <div class="stat">Iteration: <b id="iter">0</b></div>
     <div class="stat">SSE (ผลรวมระยะทาง²): <b id="sse">—</b></div>
     <div class="stat">สถานะ: <b id="state">ยังไม่ลู่เข้า</b></div>
     <div class="stat">จุด/คลัสเตอร์: <b id="sizes">—</b></div>
+  </div>
+  <div class="elbow">
+    <div class="etitle">📉 Elbow Method — SSE ตามค่า k (จุดที่กราฟเริ่ม "หักศอก" คือ k ที่ดีที่สุด • คลิกแท่งเพื่อเลือก k)</div>
+    <canvas id="elbow" width="820" height="150"></canvas>
   </div>
 </div>
 <div class="info">
@@ -80,8 +86,10 @@ const W=canvas.width,H=canvas.height;
 const L=58,R=20,T=26,B=46;
 const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
-const PAL=['#ef4444','#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899'];
+const PAL=['#ef4444','#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#14b8a6','#f97316'];
 let pts=[], centroids=[], assign=[], k=4, iter=0, running=false, raf=null, converged=false;
+const ELMAX=8;
+let elbowData=[];
 
 function genData(n){
   pts=[];
@@ -91,6 +99,7 @@ function genData(n){
     pts.push({x:c[0]+rand(-0.11,0.11), y:c[1]+rand(-0.11,0.11)});
   }
   initCentroids();
+  computeElbow();
 }
 function initCentroids(){
   centroids=[];
@@ -193,6 +202,88 @@ function draw(){
   const cnt=new Array(centroids.length).fill(0);
   for(const a of assign)cnt[a]++;
   $('sizes').textContent=cnt.join(' / ');
+  drawElbow();
+}
+function quickK(kv,maxIter){
+  let cents=[];
+  const shuf=[...pts].sort(()=>Math.random()-0.5);
+  if($('init').value==='kpp'&&pts.length>=kv){
+    cents.push({x:pts[Math.floor(Math.random()*pts.length)].x,y:pts[Math.floor(Math.random()*pts.length)].y});
+    while(cents.length<kv){
+      const ds=pts.map(p=>{let bd=1e9;for(const c of cents){const d=(p.x-c.x)**2+(p.y-c.y)**2;if(d<bd)bd=d;}return bd;});
+      const sum=ds.reduce((a,b)=>a+b,0)||1;
+      let r=Math.random()*sum,pick=ds.length-1;
+      for(let i=0;i<ds.length;i++){r-=ds[i];if(r<=0){pick=i;break;}}
+      cents.push({x:pts[pick].x,y:pts[pick].y});
+    }
+  }else{
+    for(let i=0;i<kv;i++)cents.push({x:shuf[i].x,y:shuf[i].y});
+  }
+  const asg=new Array(pts.length).fill(0);
+  for(let it=0;it<maxIter;it++){
+    for(let i=0;i<pts.length;i++){
+      let bd=1e9,bi=0;
+      for(let j=0;j<cents.length;j++){
+        const d=(pts[i].x-cents[j].x)**2+(pts[i].y-cents[j].y)**2;
+        if(d<bd){bd=d;bi=j;}
+      }
+      asg[i]=bi;
+    }
+    const sums=cents.map(()=>({x:0,y:0,n:0}));
+    for(let i=0;i<pts.length;i++){sums[asg[i]].x+=pts[i].x;sums[asg[i]].y+=pts[i].y;sums[asg[i]].n++;}
+    let moved=false;
+    for(let j=0;j<cents.length;j++){
+      if(!sums[j].n)continue;
+      const nx=sums[j].x/sums[j].n, ny=sums[j].y/sums[j].n;
+      if(Math.abs(nx-cents[j].x)>1e-4||Math.abs(ny-cents[j].y)>1e-4)moved=true;
+      cents[j]={x:nx,y:ny};
+    }
+    if(!moved)break;
+  }
+  let s=0;
+  for(let i=0;i<pts.length;i++){
+    let bd=1e9;
+    for(let j=0;j<cents.length;j++){
+      const d=(pts[i].x-cents[j].x)**2+(pts[i].y-cents[j].y)**2;
+      if(d<bd)bd=d;
+    }
+    s+=bd;
+  }
+  return s;
+}
+function computeElbow(){
+  if(!pts.length){elbowData=[];return;}
+  elbowData=[];
+  for(let kv=1;kv<=ELMAX;kv++){
+    const s=Math.min(quickK(kv,40),quickK(kv,40));
+    elbowData.push({k:kv,sse:s});
+  }
+}
+function drawElbow(){
+  const ec=$('elbow');
+  if(!ec)return;
+  const x=ec.getContext('2d');
+  const EW=ec.width,EH=ec.height;
+  x.clearRect(0,0,EW,EH);
+  if(!elbowData.length)return;
+  const curK=+$('k').value;
+  const maxS=Math.max(...elbowData.map(d=>d.sse),1e-9);
+  const padL=44,padR=10,padT=16,padB=26;
+  const bw=(EW-padL-padR)/elbowData.length;
+  for(const d of elbowData){
+    const h=(d.sse/maxS)*(EH-padT-padB);
+    const bx=padL+(d.k-1)*bw, by=EH-padB-h;
+    x.fillStyle=d.k===curK?'#db2777':'#f9a8d4';
+    x.fillRect(bx+3,by,bw-6,h);
+    x.fillStyle=d.k===curK?'#db2777':'#9d174d';
+    x.font='10px sans-serif';x.textAlign='center';
+    x.fillText(d.sse.toFixed(0),bx+bw/2,by-4);
+    x.fillStyle=d.k===curK?'#db2777':'#64748b';
+    x.font='bold 12px sans-serif';
+    x.fillText('k='+d.k,bx+bw/2,EH-8);
+  }
+  x.fillStyle='#94a3b8';x.font='10px sans-serif';x.textAlign='center';
+  x.fillText('SSE (ผลรวมระยะทาง²) — ยิ่ง k มาก SSE ยิ่งน้อย แต่ k ที่ "หักศอก" คุ้มค่าที่สุด',(padL+EW-padR)/2,12);
 }
 function hexA(hex,a){
   const n=parseInt(hex.slice(1),16);
@@ -223,15 +314,27 @@ canvas.addEventListener('click',e=>{
   const c=inv({x:(e.clientX-r.left)*(W/r.width),y:(e.clientY-r.top)*(H/r.height)});
   if(c.x<0.02||c.x>0.98||c.y<0.02||c.y>0.98)return;
   pts.push({x:Math.max(0,Math.min(1,c.x)),y:Math.max(0,Math.min(1,c.y))});
-  stop();initCentroids();draw();
+  stop();initCentroids();computeElbow();draw();
 });
 $('rand').onclick=()=>{stop();genData(90);draw();};
 $('reset').onclick=()=>{stop();initCentroids();draw();};
 function kSync(){k=+$('k').value;$('kn').value=k;stop();initCentroids();draw();}
 $('k').oninput=kSync;
-$('resetP').onclick=()=>{$('k').value=4;$('kn').value=4;$('init').value='random';kSync();};
-$('kn').oninput=()=>{let v=Math.round(+$('kn').value);if(isNaN(v))v=4;v=Math.min(6,Math.max(2,v));$('k').value=v;kSync();};
-$('init').onchange=()=>{stop();initCentroids();draw();};
+$('elbow').addEventListener('click',e=>{
+  const ec=$('elbow');
+  const r=ec.getBoundingClientRect();
+  const pxx=(e.clientX-r.left)*(ec.width/r.width);
+  const padL=44,padR=10;
+  const bw=(ec.width-padL-padR)/Math.max(1,elbowData.length);
+  const kk=Math.floor((pxx-padL)/bw)+1;
+  if(kk>=1&&kk<=ELMAX){
+    k=kk;$('k').value=kk;$('kn').value=kk;
+    stop();initCentroids();draw();
+  }
+});
+$('resetP').onclick=()=>{$('k').value=4;$('kn').value=4;$('init').value='random';kSync();computeElbow();};
+$('kn').oninput=()=>{let v=Math.round(+$('kn').value);if(isNaN(v))v=4;v=Math.min(8,Math.max(1,v));$('k').value=v;kSync();};
+$('init').onchange=()=>{stop();initCentroids();computeElbow();draw();};
 function resetIter(){iter=0;converged=false;}
 
 genData(90);draw();
