@@ -36,6 +36,8 @@ select{border:1px solid #cbd5e1;border-radius:8px;padding:9px 12px;font-size:14p
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
 .lc{margin-top:14px}
 .lctitle{font-size:13px;color:var(--mut);font-weight:600;margin-bottom:8px}
+.cmrow{display:flex;gap:16px;margin-top:12px;align-items:center;flex-wrap:wrap}
+.cmstats{display:flex;flex-wrap:wrap;gap:8px}
 .info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
 .info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
 code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
@@ -53,6 +55,18 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
   <div class="lc">
     <div class="lctitle">📈 Learning Curve (kNN ไม่มีการฝึก — ความแม่นยำตามค่า k) — คลิกแท่งเพื่อเลือก k</div>
     <canvas id="lc" width="820" height="160"></canvas>
+  </div>
+  <div class="cmwrap">
+    <div class="lctitle">🎯 Confusion Matrix — แถว = คลาสจริง, คอลัมน์ = ที่ทำนาย (Precision / Recall / F1 อัปเดตตาม k)</div>
+    <div class="cmrow">
+      <canvas id="cm" width="260" height="200"></canvas>
+      <div class="cmstats">
+        <div class="stat">Precision: <b id="prec">—</b></div>
+        <div class="stat">Recall: <b id="recl">—</b></div>
+        <div class="stat">F1: <b id="f1">—</b></div>
+        <div class="stat">Accuracy: <b id="cmacc">—</b></div>
+      </div>
+    </div>
   </div>
   <div class="controls">
     <button id="rand" class="primary">สุ่มข้อมูล</button>
@@ -214,6 +228,7 @@ function draw(){
   for(const p of pts)p.c===0?c0++:c1++;
   $('c0n').textContent=c0;$('c1n').textContent=c1;
   drawKAcc();
+  drawCMBox();
 }
 
 let moveT=null;
@@ -237,6 +252,59 @@ canvas.addEventListener('click',e=>{
 $('rand').onclick=()=>{genData(36);draw();};
 $('clear').onclick=()=>{pts=[];computeBoundary();draw();};
 function kSync(){k=+$('k').value;$('kn').value=k;computeBoundary();draw();}
+function cmData(){
+  let tp=0,tn=0,fp=0,fn=0;
+  for(const p of pts){
+    const pred=classify(p).cls;
+    if(p.c===1){pred===1?tp++:fn++;}else{pred===1?fp++:tn++;}
+  }
+  return {tp,tn,fp,fn};
+}
+function cmMetrics(cm){
+  const prec=cm.tp+cm.fp>0?cm.tp/(cm.tp+cm.fp):0;
+  const recl=cm.tp+cm.fn>0?cm.tp/(cm.tp+cm.fn):0;
+  const f1=prec+recl>0?2*prec*recl/(prec+recl):0;
+  const total=cm.tp+cm.tn+cm.fp+cm.fn;
+  return {prec,recl,f1,acc:total>0?(cm.tp+cm.tn)/total:0};
+}
+function drawCMBox(){
+  const cc=document.getElementById('cm');
+  if(!cc)return;
+  const x=cc.getContext('2d');
+  const W2=cc.width,H2=cc.height;
+  x.clearRect(0,0,W2,H2);
+  const cm=cmData(), mt=cmMetrics(cm);
+  if(cm.tp+cm.tn+cm.fp+cm.fn===0){$('prec').textContent='—';$('recl').textContent='—';$('f1').textContent='—';$('cmacc').textContent='—';return;}
+  const padL=54,padT=44,padR=16,padB=18;
+  const cw=(W2-padL-padR)/2, ch=(H2-padT-padB)/2;
+  const cells=[[cm.tn,cm.fp],[cm.fn,cm.tp]];
+  const maxV=Math.max(cm.tp,cm.tn,cm.fp,cm.fn,1);
+  x.font='bold 24px sans-serif';x.textAlign='center';x.textBaseline='middle';
+  for(let r=0;r<2;r++)for(let c=0;c<2;c++){
+    const v=cells[r][c];
+    const a=0.18+0.82*(v/maxV);
+    x.fillStyle=r===c?'rgba(22,163,74,'+a.toFixed(2)+')':'rgba(220,38,38,'+a.toFixed(2)+')';
+    x.fillRect(padL+c*cw,padT+r*ch,cw-4,ch-4);
+    x.fillStyle='#fff';
+    x.fillText(v,padL+c*cw+cw/2,padT+r*ch+ch/2);
+  }
+  x.textBaseline='alphabetic';
+  x.fillStyle='#0f172a';x.font='bold 11px sans-serif';x.textAlign='center';
+  x.fillText('ทำนาย 0',padL+cw/2,16);
+  x.fillText('ทำนาย 1',padL+cw+cw/2,16);
+  x.textAlign='left';
+  x.fillText('จริง 0 (ลบ)',4,padT+ch/2+4);
+  x.fillText('จริง 1 (บวก)',4,padT+ch+ch/2+4);
+  x.font='10px sans-serif';x.fillStyle='#64748b';
+  x.fillText('TN',padL+3,padT+12);
+  x.fillText('FP',padL+cw+3,padT+12);
+  x.fillText('FN',padL+3,padT+ch+12);
+  x.fillText('TP',padL+cw+3,padT+ch+12);
+  $('prec').textContent=(mt.prec*100).toFixed(1)+'%';
+  $('recl').textContent=(mt.recl*100).toFixed(1)+'%';
+  $('f1').textContent=mt.f1.toFixed(3);
+  $('cmacc').textContent=(mt.acc*100).toFixed(1)+'%';
+}
 function drawKAcc(){
   const cc=document.getElementById('lc');
   if(!cc)return;
