@@ -27,6 +27,8 @@ button.pat.active{background:var(--accent);border-color:var(--accent);color:#fff
 .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
 .stat b{color:var(--accent);font-size:15px}
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
+.lc{margin-top:14px}
+.lctitle{font-size:13px;color:var(--mut);font-weight:600;margin-bottom:8px}
 label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
 .check{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600}
 input[type=range]{accent-color:var(--accent)}
@@ -49,6 +51,10 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
 </header>
 <div class="card">
   <canvas id="c" width="640" height="340"></canvas>
+  <div class="lc">
+    <div class="lctitle">📈 Learning Curve — Loss (แกนซ้าย, log scale) กับ Accuracy (แกนขวา) ตาม Epoch — อัปเดตสดขณะฝึก</div>
+    <canvas id="lc" width="860" height="190"></canvas>
+  </div>
   <div class="controls">
     <button id="train" class="primary">▶ ฝึก (Backprop)</button>
     <button id="resetW" class="danger">สุ่มน้ำหนักใหม่</button>
@@ -93,7 +99,7 @@ const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
 const patterns=[[0,0,0],[0,1,1],[1,0,1],[1,1,0]];
 let netA=null, netB=null, sel=[0,0], running=false, raf=null, epoch=0, HN=4, comp=false;
-const lossHist=[], lossHistB=[];
+const lossHist=[], lossHistB=[], accHist=[], accHistB=[];
 
 function mkNet(){
   return {W1:Array.from({length:HN},()=>[rand(-1,1),rand(-1,1)]),b1:Array.from({length:HN},()=>rand(-1,1)),W2:Array.from({length:HN},()=>rand(-1,1)),b2:rand(-1,1)};
@@ -101,7 +107,7 @@ function mkNet(){
 function initW(){
   HN=+$('hn').value;
   netA=mkNet();netB=mkNet();
-  epoch=0;lossHist.length=0;lossHistB.length=0;stop();$('train').textContent='▶ ฝึก (Backprop)';
+  epoch=0;lossHist.length=0;lossHistB.length=0;accHist.length=0;accHistB.length=0;stop();$('train').textContent='▶ ฝึก (Backprop)';
 }
 const sig=t=>1/(1+Math.exp(-t));
 function forward(net,x){
@@ -174,38 +180,7 @@ function draw(){
   ctx.fillStyle='#64748b';ctx.font='12px sans-serif';ctx.textAlign='center';
   ctx.fillText('y ̂',nOx,nOy+RO+20);
 
-  // loss chart inset (A/B)
-  if(lossHist.length>2||(comp&&lossHistB.length>2)){
-    const iw=210, ih=88, ix=W-iw-14, iy=12;
-    ctx.fillStyle='rgba(255,255,255,.93)';ctx.strokeStyle='#e2e8f0';
-    ctx.beginPath();ctx.roundRect(ix,iy,iw,ih,8);ctx.fill();ctx.stroke();
-    ctx.fillStyle='#64748b';ctx.font='10px sans-serif';ctx.textAlign='left';
-    ctx.fillText('Loss (MSE) — 4 รูปแบบ XOR',ix+8,iy+13);
-    ctx.fillStyle='#2563eb';ctx.fillRect(ix+8,iy+20,12,4);
-    ctx.fillStyle='#64748b';ctx.fillText('A (lr='+(+$('lr').value).toFixed(2)+')',ix+24,iy+24);
-    if(comp){
-      ctx.fillStyle='#f97316';ctx.fillRect(ix+8,iy+32,12,4);
-      ctx.fillStyle='#64748b';ctx.fillText('B (lr='+(+$('lrb').value).toFixed(2)+')',ix+24,iy+36);
-    }
-    const plotTop=iy+42;
-    const all=[...(comp?lossHistB:[]),...lossHist];
-    if(all.length>2){
-      const max=Math.max(...all),min=Math.min(...all);
-      const rng=Math.max(max-min,1e-9);
-      const ph=iy+ih-8-plotTop;
-      const series=[{h:lossHist,c:'#2563eb'},...(comp?[{h:lossHistB,c:'#f97316'}]:[])];
-      for(const s of series){
-        if(s.h.length<2)continue;
-        ctx.strokeStyle=s.c;ctx.lineWidth=2;ctx.beginPath();
-        s.h.forEach((v,i)=>{
-          const x=ix+8+(iw-16)*i/(s.h.length-1);
-          const y=plotTop+ph*(1-(v-min)/rng);
-          i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
-        });
-        ctx.stroke();
-      }
-    }
-  }
+  drawLC();
   $('ep').textContent=epoch;
   $('loss').textContent=mseOf(netA).toFixed(5);
   $('inp').textContent='('+sel[0]+', '+sel[1]+')';
@@ -234,7 +209,8 @@ function loop(){
   if(!running)return;
   for(let i=0;i<80;i++)trainEpoch();
   lossHist.push(mseOf(netA));
-  if(comp)lossHistB.push(mseOf(netB));
+  accHist.push(accOf(netA)/4);
+  if(comp){lossHistB.push(mseOf(netB));accHistB.push(accOf(netB)/4);}
   if((mseOf(netA)<0.0005&&(!comp||mseOf(netB)<0.0005))||epoch>60000){stop();$('train').textContent='▶ ฝึก (Backprop)';}
   draw();
   raf=requestAnimationFrame(loop);
@@ -244,6 +220,77 @@ function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=null;}
 
 function hnSync(){const v=+$('hn').value;$('hnn').value=v;initW();draw();}
 function lrSync(){const v=+$('lr').value;$('lrn').value=v.toFixed(2);}
+function drawLC(){
+  const cc=document.getElementById('lc');
+  if(!cc)return;
+  const x=cc.getContext('2d');
+  const W2=cc.width,H2=cc.height;
+  x.clearRect(0,0,W2,H2);
+  const padL=50,padR=52,padT=22,padB=28;
+  const pw=W2-padL-padR, ph=H2-padT-padB;
+  x.strokeStyle='#e2e8f0';x.lineWidth=1;
+  x.strokeRect(padL,padT,pw,ph);
+  const losses=[...(comp?lossHistB:[]),...lossHist];
+  if(!losses.length)return;
+  const loL=Math.max(Math.min(...losses),1e-5);
+  const hiL=Math.max(...losses,1e-4);
+  const span=Math.log10(hiL)-Math.log10(loL)||1;
+  const yOf=v=>padT+ph*(1-(Math.log10(Math.max(v,loL))-Math.log10(loL))/span);
+  x.font='10px sans-serif';x.textAlign='right';
+  for(let p=Math.floor(Math.log10(hiL));p>=Math.ceil(Math.log10(loL));p--){
+    const v=Math.pow(10,p);
+    const y=yOf(v);
+    x.strokeStyle='#eef2f7';x.beginPath();x.moveTo(padL,y);x.lineTo(padL+pw,y);x.stroke();
+    x.fillStyle='#94a3b8';x.fillText('1e'+p,padL-6,y+3);
+  }
+  const ay=v=>padT+ph*(1-v);
+  x.strokeStyle='#f1f5f9';
+  x.beginPath();x.moveTo(padL,ay(0.5));x.lineTo(padL+pw,ay(0.5));x.stroke();
+  x.fillStyle='#94a3b8';x.textAlign='left';
+  x.fillText('acc 0.5',padL+pw+6,ay(0.5)+3);
+  x.fillText('acc 1.0',padL+pw+6,ay(1)+3);
+  const nMax=Math.max(lossHist.length,comp?lossHistB.length:0);
+  const accSeries=[{h:accHist,c:'#16a34a'},...(comp?[{h:accHistB,c:'#84cc16'}]:[])];
+  for(const s of accSeries){
+    if(s.h.length<2)continue;
+    x.strokeStyle=s.c;x.lineWidth=2;x.beginPath();
+    s.h.forEach((v,i)=>{
+      const px2=padL+(i/(nMax-1||1))*pw;
+      const py=ay(v);
+      i===0?x.moveTo(px2,py):x.lineTo(px2,py);
+    });
+    x.stroke();
+  }
+  const lossSeries=[{h:lossHist,c:'#2563eb'},...(comp?[{h:lossHistB,c:'#f97316'}]:[])];
+  for(const s of lossSeries){
+    if(s.h.length<2)continue;
+    x.strokeStyle=s.c;x.lineWidth=2;x.beginPath();
+    s.h.forEach((v,i)=>{
+      const px2=padL+(i/(nMax-1||1))*pw;
+      const py=yOf(v);
+      i===0?x.moveTo(px2,py):x.lineTo(px2,py);
+    });
+    x.stroke();
+  }
+  x.textAlign='left';
+  x.fillStyle='#2563eb';x.fillRect(padL+8,6,12,4);
+  x.fillStyle='#64748b';x.fillText('Loss A',padL+24,10);
+  x.fillStyle='#16a34a';x.fillRect(padL+78,6,12,4);
+  x.fillStyle='#64748b';x.fillText('Acc A',padL+94,10);
+  if(comp){
+    x.fillStyle='#f97316';x.fillRect(padL+146,6,12,4);
+    x.fillStyle='#64748b';x.fillText('Loss B',padL+162,10);
+    x.fillStyle='#84cc16';x.fillRect(padL+212,6,12,4);
+    x.fillStyle='#64748b';x.fillText('Acc B',padL+228,10);
+  }
+  x.fillStyle='#94a3b8';x.textAlign='center';
+  x.fillText('epoch',padL+pw/2,H2-8);
+  x.textAlign='right';
+  x.fillStyle='#2563eb';
+  x.fillText('loss='+(lossHist.length?lossHist[lossHist.length-1].toFixed(5):'—'),padL+pw,H2-8);
+  x.fillStyle='#16a34a';
+  x.fillText('acc='+(accHist.length?accHist[accHist.length-1].toFixed(2):'—'),padL+pw-110,H2-8);
+}
 $('hn').oninput=hnSync;
 $('comp').onchange=e=>{comp=e.target.checked;initW();draw();};
 $('lrb').oninput=e=>{$('lrbn').value=(+e.target.value).toFixed(2);};
