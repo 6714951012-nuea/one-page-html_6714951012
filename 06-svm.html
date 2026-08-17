@@ -78,6 +78,11 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
       <input type="range" id="lr" min="0.01" max="0.2" step="0.01" value="0.05">
       <input type="number" id="lrn" class="num" min="0.01" max="0.2" step="0.01" value="0.05">
     </label>
+    <label class="check"><input type="checkbox" id="comp"> 🔀 เปรียบเทียบ A/B (C ต่างกัน)</label>
+    <label class="slider">C ของ B <span class="tip" title="C ของ B" data-tip="ค่า C ของฝั่ง B สำหรับเทียบ A/B — ตั้ง C ต่ำ (เช่น 1) กับ C สูง (เช่น 20) แล้วดู margin กว้าง-แคบต่างกัน">?</span>
+      <input type="range" id="cb" min="0.5" max="20" step="0.5" value="1">
+      <input type="number" id="cbn" class="num" min="0.5" max="20" step="0.5" value="1">
+    </label>
     <button id="resetP" class="danger">↺ ค่าเริ่มต้น</button>
     <span class="hint">💡 คลิกเพิ่มจุด • กดปุ่ม C เพื่อสลับคลาสที่เพิ่ม</span>
   </div>
@@ -86,6 +91,7 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <div class="stat">ความกว้าง Margin: <b id="margin">—</b></div>
     <div class="stat">‖w‖: <b id="wnorm">—</b></div>
     <div class="stat">Accuracy: <b id="acc">—</b></div>
+    <div class="stat">Acc B: <b id="accb">—</b></div>
     <div class="stat">ผิดคลาส: <b id="mis">0</b></div>
   </div>
 </div>
@@ -100,8 +106,8 @@ const L=58,R=20,T=26,B=46;
 const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
 const C0=[239,68,68], C1=[59,130,246];
-let pts=[], w1=1, w2=1, b=0, running=false, raf=null, steps=0, selClass=0;
-const lossHist=[], accHist=[];
+let pts=[], w1=1, w2=1, b=0, running=false, raf=null, steps=0, selClass=0, comp=false, w1B=1, w2B=1, bB=0;
+const lossHist=[], accHist=[], lossHistB=[];
 
 function genData(n){
   pts=[];
@@ -114,18 +120,22 @@ function genData(n){
   }
   resetParams();
 }
-function resetParams(){w1=1;w2=1;b=0;steps=0;lossHist.length=0;accHist.length=0;stop();$('train').textContent='เริ่มฝึก (Hinge Loss)';}
+function resetParams(){w1=1;w2=1;b=0;w1B=1;w2B=1;bB=0;steps=0;lossHist.length=0;accHist.length=0;lossHistB.length=0;stop();$('train').textContent='เริ่มฝึก (Hinge Loss)';}
 function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
 function inv(c){return {x:(c.x-L)/(W-L-R), y:1-(c.y-T)/(H-T-B)}}
 const f=(p)=>w1*p.x+w2*p.y+b;
-function sgdStep(){
-  const lr=+$('lr').value, C=+$('c').value;
+function sgdStepFor(target){
+  const lr=+$('lr').value;
+  const C=target==='A'?+$('c').value:+$('cb').value;
   if(!pts.length)return;
+  let w1v,w2v,bv;
+  if(target==='A'){w1v=w1;w2v=w2;bv=b;}else{w1v=w1B;w2v=w2B;bv=bB;}
   const p=pts[Math.floor(Math.random()*pts.length)];
   const y=p.c===1?1:-1;
-  const v=y*f(p);
-  if(v<1){w1+=lr*(C*y*p.x-w1);w2+=lr*(C*y*p.y-w2);b+=lr*C*y;}
-  else{w1-=lr*w1;w2-=lr*w2;}
+  const v=y*(w1v*p.x+w2v*p.y+bv);
+  if(v<1){w1v+=lr*(C*y*p.x-w1v);w2v+=lr*(C*y*p.y-w2v);bv+=lr*C*y;}
+  else{w1v-=lr*w1v;w2v-=lr*w2v;}
+  if(target==='A'){w1=w1v;w2=w2v;b=bv;}else{w1B=w1v;w2B=w2v;bB=bv;}
   steps++;
 }
 function accuracy(){
@@ -139,26 +149,28 @@ function svCount(){
   for(const p of pts){const y=p.c===1?1:-1;if(y*f(p)<=1)n++;}
   return n;
 }
-function hingeLoss(){
+function hingeLossFor(w1v,w2v,bv){
   if(!pts.length)return 0;
   let s=0;
-  for(const p of pts){const y=p.c===1?1:-1;s+=Math.max(0,1-y*f(p));}
+  for(const p of pts){const y=p.c===1?1:-1;s+=Math.max(0,1-y*(w1v*p.x+w2v*p.y+bv));}
   return s/pts.length;
 }
+function hingeLoss(){return hingeLossFor(w1,w2,b);}
 
-function lineY(x,val){
-  if(Math.abs(w2)<1e-9)return null;
-  return (val-b-w1*x)/w2;
+function lineY(x,val,w1v,w2v,bv){
+  if(Math.abs(w2v)<1e-9)return null;
+  return (val-bv-w1v*x)/w2v;
 }
-function drawLine(val,style,wid,dash){
+function drawLineFor(val,style,wid,dash,w1v,w2v,bv){
   ctx.strokeStyle=style;ctx.lineWidth=wid;
   if(dash)ctx.setLineDash(dash);
-  const p1=px({x:0,y:lineY(0,val)}), p2=px({x:1,y:lineY(1,val)});
+  const p1=px({x:0,y:lineY(0,val,w1v,w2v,bv)}), p2=px({x:1,y:lineY(1,val,w1v,w2v,bv)});
   if(p1.y>-200&&p1.y<H+200&&p2.y>-200&&p2.y<H+200){
     ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke();
   }
   if(dash)ctx.setLineDash([]);
 }
+function drawLine(val,style,wid,dash){drawLineFor(val,style,wid,dash,w1,w2,b);}
 
 function draw(){
   ctx.clearRect(0,0,W,H);
@@ -180,6 +192,12 @@ function draw(){
     const c=px({x:1,y:lineY(1,1)}), e=px({x:1,y:lineY(1,-1)});
     ctx.fillStyle='rgba(220,38,38,.07)';
     ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(d.x,d.y);ctx.lineTo(e.x,e.y);ctx.lineTo(c.x,c.y);ctx.closePath();ctx.fill();
+  }
+  // B (เปรียบเทียบ A/B) — วาดใต้ A
+  if(comp){
+    drawLineFor(-1,'rgba(249,115,22,.4)',1.2,[3,3],w1B,w2B,bB);
+    drawLineFor(1,'rgba(249,115,22,.4)',1.2,[3,3],w1B,w2B,bB);
+    drawLineFor(0,'#f97316',2.5,[8,4],w1B,w2B,bB);
   }
   // margin lines
   drawLine(-1,'rgba(220,38,38,.5)',1.5,[6,4]);
@@ -206,15 +224,19 @@ function draw(){
   let mc=0;
   for(const p of pts)if((f(p)>=0?1:0)!==p.c)mc++;
   $('mis').textContent=mc;
+  $('accb').textContent=comp?(pts.length?accB().toFixed(1)+'%':'—'):'—';
   drawLC();
   drawCMBox();
 }
+function fB(p){return w1B*p.x+w2B*p.y+bB;}
+function accB(){if(!pts.length)return 0;let ok=0;for(const p of pts)if((fB(p)>=0?1:0)===p.c)ok++;return ok/pts.length*100;}
 
 function loop(){
   if(!running)return;
-  for(let i=0;i<250;i++)sgdStep();
+  for(let i=0;i<250;i++){sgdStepFor('A');if(comp)sgdStepFor('B');}
   lossHist.push(hingeLoss());
   accHist.push(accuracy());
+  if(comp)lossHistB.push(hingeLossFor(w1B,w2B,bB));
   if(steps>30000){stop();$('train').textContent='เริ่มฝึก (Hinge Loss)';}
   draw();
   raf=requestAnimationFrame(loop);
@@ -287,9 +309,9 @@ function drawLC(){
   const pw=W2-padL-padR, ph=H2-padT-padB;
   x.strokeStyle='#e2e8f0';x.lineWidth=1;
   x.strokeRect(padL,padT,pw,ph);
-  if(!lossHist.length)return;
-  const loL=Math.max(Math.min(...lossHist),1e-3);
-  const hiL=Math.max(...lossHist,1e-2);
+  if(!lossHist.length&&!(comp&&lossHistB.length))return;
+  const loL=Math.max(Math.min(...lossHist,...(comp?lossHistB:[])),1e-3);
+  const hiL=Math.max(...lossHist,...(comp?lossHistB:[]),1e-2);
   const span=Math.log10(hiL)-Math.log10(loL)||1;
   const yOf=v=>padT+ph*(1-(Math.log10(Math.max(v,loL))-Math.log10(loL))/span);
   x.font='10px sans-serif';x.textAlign='right';
@@ -311,25 +333,34 @@ function drawLC(){
     accHist.forEach((v,i)=>{const px2=padL+(i/(nMax-1||1))*pw;const py=ay(v/100);i===0?x.moveTo(px2,py):x.lineTo(px2,py);});
     x.stroke();
   }
-  if(lossHist.length>1){
-    x.strokeStyle='#dc2626';x.lineWidth=2;x.beginPath();
-    lossHist.forEach((v,i)=>{const px2=padL+(i/(nMax-1||1))*pw;const py=yOf(v);i===0?x.moveTo(px2,py):x.lineTo(px2,py);});
-    x.stroke();
+  const series=[{h:lossHist,c:'#dc2626'},...(comp&&lossHistB.length?[{h:lossHistB,c:'#f97316'}]:[])];
+  for(const s of series){
+    if(s.h.length>1){
+      x.strokeStyle=s.c;x.lineWidth=2;x.beginPath();
+      s.h.forEach((v,i)=>{const px2=padL+(i/(nMax-1||1))*pw;const py=yOf(v);i===0?x.moveTo(px2,py):x.lineTo(px2,py);});
+      x.stroke();
+    }
   }
   x.textAlign='left';
   x.fillStyle='#dc2626';x.fillRect(padL+8,8,12,4);
   x.fillStyle='#64748b';x.fillText('Hinge Loss',padL+24,12);
   x.fillStyle='#16a34a';x.fillRect(padL+96,8,12,4);
   x.fillStyle='#64748b';x.fillText('Acc',padL+112,12);
+  if(comp){x.fillStyle='#f97316';x.fillRect(padL+140,8,12,4);x.fillStyle='#64748b';x.fillText('Loss B',padL+156,12);}
   x.fillStyle='#94a3b8';x.textAlign='center';
   x.fillText('step',padL+pw/2,H2-8);
   x.textAlign='right';x.fillStyle='#dc2626';
   x.fillText('loss='+(lossHist.length?lossHist[lossHist.length-1].toFixed(3):'—'),padL+pw,H2-8);
+  if(comp){x.fillStyle='#f97316';x.fillText('lossB='+(lossHistB.length?lossHistB[lossHistB.length-1].toFixed(3):'—'),padL+pw-215,H2-8);}
   x.fillStyle='#16a34a';
   x.fillText('acc='+(accHist.length?accHist[accHist.length-1].toFixed(1)+'%':'—'),padL+pw-110,H2-8);
 }
 $('c').oninput=cSync;
-$('resetP').onclick=()=>{$('c').value=6;$('cn').value=6;$('lr').value=0.05;$('lrn').value=0.05;cSync();lrSync();};
+$('comp').onchange=e=>{comp=e.target.checked;resetParams();draw();};
+function cbSync(){const v=+$('cb').value;$('cbn').value=v.toFixed(1);}
+$('cb').oninput=cbSync;
+$('cbn').oninput=()=>{let v=+$('cbn').value;if(isNaN(v))v=1;v=Math.min(20,Math.max(0.5,v));$('cb').value=v;cbSync();};
+$('resetP').onclick=()=>{$('c').value=6;$('cn').value=6;$('lr').value=0.05;$('lrn').value=0.05;$('comp').checked=false;comp=false;$('cb').value=1;$('cbn').value=1;cSync();lrSync();};
 $('cn').oninput=()=>{let v=+$('cn').value;if(isNaN(v))v=6;v=Math.min(20,Math.max(0.5,v));$('c').value=v;cSync();};
 $('lr').oninput=lrSync;
 $('lrn').oninput=()=>{let v=+$('lrn').value;if(isNaN(v))v=0.05;v=Math.min(0.2,Math.max(0.01,v));$('lr').value=v;lrSync();};

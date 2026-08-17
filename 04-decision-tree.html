@@ -67,6 +67,11 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
       <input type="range" id="mins" min="4" max="30" value="8">
       <input type="number" id="msn" class="num" min="4" max="30" step="1" value="8">
     </label>
+    <label class="check"><input type="checkbox" id="comp"> 🔀 เปรียบเทียบ A/B (ความลึกต่างกัน)</label>
+    <label class="slider">ความลึกของ B <span class="tip" title="ความลึกของ B" data-tip="ความลึกสูงสุดของต้นไม้ฝั่ง B สำหรับเทียบ A/B — เช่น A=1 (เรียบง่าย) กับ B=6 (ละเอียด) แล้วเห็นเส้นแบ่งและ accuracy ต่างกัน">?</span>
+      <input type="range" id="depthb" min="1" max="6" value="6">
+      <input type="number" id="dbn" class="num" min="1" max="6" step="1" value="6">
+    </label>
     <button id="c0" class="activeCls" style="background:#fee2e2;color:#b91c1c">เพิ่ม Class 0 (แดง)</button>
     <button id="c1" style="background:#dbeafe;color:#1d4ed8">เพิ่ม Class 1 (น้ำเงิน)</button>
     <button id="resetP" class="danger">↺ ค่าเริ่มต้น</button>
@@ -78,7 +83,9 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <div class="stat">ความลึกสูงสุด: <b id="md">4</b></div>
     <div class="stat">Min samples/ใบ: <b id="ms">8</b></div>
     <div class="stat">Accuracy (self): <b id="acc">—</b></div>
+    <div class="stat">Acc B: <b id="accb">—</b></div>
     <div class="stat">จำนวนใบ: <b id="leaves">0</b></div>
+    <div class="stat">ใบ B: <b id="leavesb">0</b></div>
   </div>
 </div>
 <div class="card">
@@ -97,7 +104,7 @@ const L=58,R=20,T=26,B=46;
 const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
 const C0=[239,68,68], C1=[59,130,246];
-let pts=[], nodes=[], root=null, revealed=0, timer=null, depthCap=4, minS=8, selC=0;
+let pts=[], nodes=[], root=null, revealed=0, timer=null, depthCap=4, minS=8, selC=0, comp=false, depthCapB=6, nodesB=[], rootB=null;
 let depthAcc=[];
 
 function genData(n){
@@ -149,15 +156,16 @@ function build(){
   nodes=[];revealed=0;clearTimer();
   root=buildNode(pts.map((_,i)=>i),0,0,{x0:0,y0:0,x1:1,y1:1});
   depthAcc=sweepDepth();
+  buildB();
   $('play').textContent='▶ เล่นอัตโนมัติ';
   $('total').textContent=nodes.length;
   draw();drawTree();
 }
-function buildNode(inds,depth,idx,region){
+function buildNodeFor(inds,depth,idx,region,dCap,nodeArr){
   const node={depth,idx,region,leaf:false,left:null,right:null,f:null,t:null,label:0};
-  if(depth>=depthCap||inds.length<minS||gini(inds)<1e-6){
+  if(depth>=dCap||inds.length<minS||gini(inds)<1e-6){
     node.leaf=true;node.label=majority(inds);
-    nodes.push(node);return node;
+    nodeArr.push(node);return node;
   }
   let best=null;
   for(const f of ['x','y']){
@@ -176,11 +184,19 @@ function buildNode(inds,depth,idx,region){
   }
   node.f=best.f;node.t=best.t;
   const key=best.f==='x'?'x1':'y1';
-  node.left=buildNode(best.left,depth+1,idx*2,Object.assign({},region,{[key]:best.t}));
+  node.left=buildNodeFor(best.left,depth+1,idx*2,Object.assign({},region,{[key]:best.t}),dCap,nodeArr);
   const key2=best.f==='x'?'x0':'y0';
-  node.right=buildNode(best.right,depth+1,idx*2+1,Object.assign({},region,{[key2]:best.t}));
-  nodes.push(node);
+  node.right=buildNodeFor(best.right,depth+1,idx*2+1,Object.assign({},region,{[key2]:best.t}),dCap,nodeArr);
+  nodeArr.push(node);
   return node;
+}
+function buildNode(inds,depth,idx,region){return buildNodeFor(inds,depth,idx,region,depthCap,nodes);}
+function buildB(){
+  depthCapB=+$('depthb').value;
+  nodesB=[];rootB=null;
+  if(comp&&pts.length){
+    rootB=buildNodeFor(pts.map((_,i)=>i),0,0,{x0:0,y0:0,x1:1,y1:1},depthCapB,nodesB);
+  }
 }
 
 function draw(){
@@ -193,6 +209,24 @@ function draw(){
     const a=px({x:r.x0,y:r.y1}), d=px({x:r.x1,y:r.y0});
     ctx.fillStyle='rgba('+(n.label===0?C0:C1).join(',')+',0.18)';
     ctx.fillRect(a.x,a.y,d.x-a.x,d.y-a.y);
+  }
+  // B splits (เปรียบเทียบ A/B) — เส้นประสีส้ม วาดใต้เส้นของ A
+  if(comp){
+    for(const n of nodesB){
+      if(n.leaf)continue;
+      const r=n.region;
+      const a=px({x:r.x0,y:r.y1}), d=px({x:r.x1,y:r.y0});
+      let sx,sy,ex,ey;
+      if(n.f==='x'){
+        const xx=px({x:n.t,y:0}).x;
+        sx=xx;sy=a.y;ex=xx;ey=d.y;
+      }else{
+        const yy=px({x:0,y:n.t}).y;
+        sx=a.x;sy=yy;ex=d.x;ey=yy;
+      }
+      ctx.strokeStyle='rgba(249,115,22,.85)';ctx.lineWidth=1.5;ctx.setLineDash([5,4]);
+      ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(ex,ey);ctx.stroke();ctx.setLineDash([]);
+    }
   }
   // split lines
   for(const n of shown){
@@ -229,7 +263,9 @@ function draw(){
   }
   $('revealed').textContent=Math.min(revealed,nodes.length);
   $('acc').textContent=root?selfAcc().toFixed(1)+'%':'—';
+  $('accb').textContent=comp?(rootB?accForTree(rootB).toFixed(1)+'%':'—'):'—';
   $('leaves').textContent=nodes.filter(n=>n.leaf).length;
+  $('leavesb').textContent=comp?nodesB.filter(n=>n.leaf).length:0;
   drawDepthAcc();
 }
 
@@ -301,6 +337,9 @@ function drawDepthAcc(){
     const bx=padL+(d.d-1)*bw, by=H2-padB-h;
     x.fillStyle=d.d===+$('depth').value?'#059669':'#a7f3d0';
     x.fillRect(bx+3,by,bw-6,h);
+    if(comp&&d.d===+$('depthb').value){
+      x.strokeStyle='#f97316';x.lineWidth=2.5;x.strokeRect(bx+3,by,bw-6,h);
+    }
     x.fillStyle=d.d===+$('depth').value?'#059669':'#047857';
     x.font='10px sans-serif';x.textAlign='center';
     x.fillText(d.acc.toFixed(0)+'%',bx+bw/2,by-4);
@@ -312,7 +351,11 @@ function drawDepthAcc(){
   x.fillText('Accuracy (self) ตามความลึก — ลึกเกินไป accuracy อาจลดลง (overfit)',(padL+W2-padR)/2,12);
 }
 $('depth').oninput=depthSync;
-$('resetP').onclick=()=>{$('depth').value=4;$('dn').value=4;$('mins').value=8;$('msn').value=8;selC=0;$('c0').classList.add('activeCls');$('c1').classList.remove('activeCls');build();};
+$('comp').onchange=e=>{comp=e.target.checked;build();};
+function depthbSync(){const v=+$('depthb').value;$('dbn').value=v;clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';build();}
+$('depthb').oninput=depthbSync;
+$('dbn').oninput=()=>{let v=Math.round(+$('dbn').value);if(isNaN(v))v=6;v=Math.min(6,Math.max(1,v));$('depthb').value=v;depthbSync();};
+$('resetP').onclick=()=>{$('depth').value=4;$('dn').value=4;$('mins').value=8;$('msn').value=8;$('comp').checked=false;comp=false;$('depthb').value=6;$('dbn').value=6;selC=0;$('c0').classList.add('activeCls');$('c1').classList.remove('activeCls');build();};
 $('lc').addEventListener('click',e=>{
   const cc=document.getElementById('lc');
   const r=cc.getBoundingClientRect();

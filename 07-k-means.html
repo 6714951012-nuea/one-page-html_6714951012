@@ -66,12 +66,22 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
       <option value="kpp">Init: K-Means++</option>
     </select>
     <span class="tip" title="การ init" data-tip="วิธีวาง centroid เริ่มต้น — K-Means++ เลือกจุดที่กระจายตัว ทำให้ผลลู่เข้าเร็วและเสถียรกว่า Random">?</span>
+    <label class="check"><input type="checkbox" id="comp"> 🔀 เปรียบเทียบ A/B (k/init ต่างกัน)</label>
+    <label class="slider">k ของ B <span class="tip" title="k ของ B" data-tip="จำนวนคลัสเตอร์ของฝั่ง B สำหรับเทียบ A/B — ตั้ง k ต่างกัน (เช่น 4 vs 8) แล้วเห็น centroid วางต่างกันบนข้อมูลชุดเดียวกัน">?</span>
+      <input type="range" id="kb" min="1" max="8" value="8">
+      <input type="number" id="kbn" class="num" min="1" max="8" step="1" value="8">
+    </label>
+    <select id="initb">
+      <option value="random">Init B: Random</option>
+      <option value="kpp">Init B: K-Means++</option>
+    </select>
     <button id="resetP" class="danger">↺ ค่าเริ่มต้น</button>
     <span class="hint">💡 คลิกบนกราฟเพิ่มจุดเอง • คลิกแท่ง Elbow ด้านล่างเพื่อเลือก k</span>
   </div>
   <div class="stats">
     <div class="stat">Iteration: <b id="iter">0</b></div>
     <div class="stat">SSE (ผลรวมระยะทาง²): <b id="sse">—</b></div>
+    <div class="stat">SSE B: <b id="sseb">—</b></div>
     <div class="stat">สถานะ: <b id="state">ยังไม่ลู่เข้า</b></div>
     <div class="stat">จุด/คลัสเตอร์: <b id="sizes">—</b></div>
   </div>
@@ -98,9 +108,9 @@ const L=58,R=20,T=26,B=46;
 const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
 const PAL=['#ef4444','#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#14b8a6','#f97316'];
-let pts=[], centroids=[], assign=[], k=4, iter=0, running=false, raf=null, converged=false;
+let pts=[], centroids=[], assign=[], k=4, iter=0, running=false, raf=null, converged=false, comp=false, k_B=8, centroidsB=[], assignB=[], iterB=0, convergedB=false;
 const ELMAX=8;
-let elbowData=[], sseHist=[];
+let elbowData=[], sseHist=[], sseHistB=[];
 
 function genData(n){
   pts=[];
@@ -112,24 +122,35 @@ function genData(n){
   initCentroids();
   computeElbow();
 }
-function initCentroids(){
-  centroids=[];
-  assign=new Array(pts.length).fill(0);
-  if($('init').value==='kpp'&&pts.length>=k){
+function initCentroidsWith(initSel,kv){
+  const cents=[];
+  if(initSel==='kpp'&&pts.length>=kv){
     // K-Means++: จุดถัดไปสุ่มด้วยความน่าจะเป็น ∝ ระยะทาง² จาก centroid ที่มีอยู่
-    centroids.push({x:pts[Math.floor(Math.random()*pts.length)].x,y:pts[Math.floor(Math.random()*pts.length)].y});
-    while(centroids.length<k){
-      const ds=pts.map(p=>{let bd=1e9;for(const c of centroids){const d=(p.x-c.x)**2+(p.y-c.y)**2;if(d<bd)bd=d;}return bd;});
+    cents.push({x:pts[Math.floor(Math.random()*pts.length)].x,y:pts[Math.floor(Math.random()*pts.length)].y});
+    while(cents.length<kv){
+      const ds=pts.map(p=>{let bd=1e9;for(const c of cents){const d=(p.x-c.x)**2+(p.y-c.y)**2;if(d<bd)bd=d;}return bd;});
       const sum=ds.reduce((a,b)=>a+b,0)||1;
       let r=Math.random()*sum,pick=ds.length-1;
       for(let i=0;i<ds.length;i++){r-=ds[i];if(r<=0){pick=i;break;}}
-      centroids.push({x:pts[pick].x,y:pts[pick].y});
+      cents.push({x:pts[pick].x,y:pts[pick].y});
     }
   }else{
     const shuf=[...pts].sort(()=>Math.random()-0.5);
-    for(let i=0;i<k;i++)centroids.push({x:shuf[i].x,y:shuf[i].y});
+    for(let i=0;i<kv;i++)cents.push({x:shuf[i].x,y:shuf[i].y});
   }
+  return cents;
+}
+function initCentroids(){
+  centroids=initCentroidsWith($('init').value,k);
+  assign=new Array(pts.length).fill(0);
   iter=0;converged=false;sseHist=[];$('state').textContent='ยังไม่ลู่เข้า';
+  if(comp)initCentroidsB();
+}
+function initCentroidsB(){
+  if(!comp)return;
+  centroidsB=initCentroidsWith($('initb').value,k_B);
+  assignB=new Array(pts.length).fill(0);
+  iterB=0;convergedB=false;sseHistB=[];
 }
 function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
 function inv(c){return {x:(c.x-L)/(W-L-R), y:1-(c.y-T)/(H-T-B)}}
@@ -164,6 +185,44 @@ function sse(){
     s+=(pts[i].x-c.x)**2+(pts[i].y-c.y)**2;
   }
   return s;
+}
+function assignStepB(){
+  for(let i=0;i<pts.length;i++){
+    let bd=1e9,bi=0;
+    for(let j=0;j<centroidsB.length;j++){
+      const d=(pts[i].x-centroidsB[j].x)**2+(pts[i].y-centroidsB[j].y)**2;
+      if(d<bd){bd=d;bi=j;}
+    }
+    assignB[i]=bi;
+  }
+}
+function updateStepB(){
+  const sums=centroidsB.map(()=>({x:0,y:0,n:0}));
+  for(let i=0;i<pts.length;i++){sums[assignB[i]].x+=pts[i].x;sums[assignB[i]].y+=pts[i].y;sums[assignB[i]].n++;}
+  let moved=false;
+  for(let j=0;j<centroidsB.length;j++){
+    if(!sums[j].n)continue;
+    const nx=sums[j].x/sums[j].n, ny=sums[j].y/sums[j].n;
+    if(Math.abs(nx-centroidsB[j].x)>1e-4||Math.abs(ny-centroidsB[j].y)>1e-4)moved=true;
+    centroidsB[j]={x:nx,y:ny};
+  }
+  iterB++;
+  return moved;
+}
+function sseB(){
+  let s=0;
+  for(let i=0;i<pts.length;i++){
+    const c=centroidsB[assignB[i]];
+    s+=(pts[i].x-c.x)**2+(pts[i].y-c.y)**2;
+  }
+  return s;
+}
+function doIterationB(){
+  assignStepB();
+  const moved=updateStepB();
+  sseHistB.push(sseB());
+  if(!moved){convergedB=true;}
+  return moved;
 }
 
 function draw(){
@@ -207,8 +266,17 @@ function draw(){
     ctx.fillStyle=PAL[j%PAL.length];ctx.fill();
     ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
   }
+  // B centroids (เปรียบเทียบ A/B) — สี่เหลี่ยมกลวง
+  if(comp&&centroidsB.length){
+    for(let j=0;j<centroidsB.length;j++){
+      const c=px(centroidsB[j]);
+      ctx.strokeStyle=PAL[j%PAL.length];ctx.lineWidth=2.5;
+      ctx.beginPath();ctx.rect(c.x-8,c.y-8,16,16);ctx.stroke();
+    }
+  }
   $('iter').textContent=iter;
   $('sse').textContent=pts.length?sse().toFixed(2):'—';
+  $('sseb').textContent=comp?(pts.length?sseB().toFixed(2):'—'):'—';
   $('state').textContent=converged?'✅ ลู่เข้าแล้ว':'ยังไม่ลู่เข้า';
   const cnt=new Array(centroids.length).fill(0);
   for(const a of assign)cnt[a]++;
@@ -309,14 +377,21 @@ function drawLC(){
   x.strokeRect(padL,padT,pw,ph);
   x.fillStyle='#94a3b8';x.font='10px sans-serif';x.textAlign='center';
   x.fillText('iteration',padL+pw/2,H2-8);
-  if(sseHist.length<2)return;
-  const maxS=Math.max(...sseHist,1e-9);
+  const all=[...sseHist,...(comp?sseHistB:[])];
+  if(all.length<2)return;
+  const maxS=Math.max(...all,1e-9);
   x.strokeStyle='#db2777';x.lineWidth=2.5;x.beginPath();
-  sseHist.forEach((v,i)=>{const px2=padL+(i/(sseHist.length-1))*pw;const py=padT+ph*(1-v/maxS);i===0?x.moveTo(px2,py):x.lineTo(px2,py);});
+  sseHist.forEach((v,i)=>{const px2=padL+(i/(all.length-1))*pw;const py=padT+ph*(1-v/maxS);i===0?x.moveTo(px2,py):x.lineTo(px2,py);});
   x.stroke();
+  if(comp&&sseHistB.length>1){
+    x.strokeStyle='#f97316';x.lineWidth=2;x.setLineDash([6,4]);x.beginPath();
+    sseHistB.forEach((v,i)=>{const px2=padL+(i/(all.length-1))*pw;const py=padT+ph*(1-v/maxS);i===0?x.moveTo(px2,py):x.lineTo(px2,py);});
+    x.stroke();x.setLineDash([]);
+  }
   x.fillStyle='#db2777';x.fillRect(padL+8,8,12,4);
   x.fillStyle='#64748b';x.font='10px sans-serif';x.textAlign='left';
   x.fillText('SSE',padL+24,12);
+  if(comp){x.fillStyle='#f97316';x.fillRect(padL+56,8,12,4);x.fillStyle='#64748b';x.fillText('SSE B',padL+72,12);}
   x.textAlign='right';
   x.fillText('SSE='+sseHist[sseHist.length-1].toFixed(2),padL+pw-4,12);
 }
@@ -335,15 +410,17 @@ function doIteration(){
 
 function loop(){
   if(!running)return;
-  const moved=doIteration();
-  if(!moved){stop();$('auto').textContent='▶ วิ่งอัตโนมัติ';return;}
+  const movedA=doIteration();
+  let movedB=true;
+  if(comp)movedB=doIterationB();
+  if(!movedA&&(!comp||!movedB)){stop();$('auto').textContent='▶ วิ่งอัตโนมัติ';return;}
   raf=requestAnimationFrame(loop);
 }
 function start(){if(!pts.length)return;running=true;$('auto').textContent='⏸ หยุด';if(raf)cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
 function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=null;}
 
 $('auto').onclick=()=>{running?stop():(resetIter(),start());};
-$('step').onclick=()=>{stop();if(!converged)doIteration();};
+$('step').onclick=()=>{stop();if(!converged)doIteration();if(comp&&!convergedB)doIterationB();draw();};
 $('cent').onclick=()=>{stop();initCentroids();draw();};
 canvas.addEventListener('click',e=>{
   const r=canvas.getBoundingClientRect();
@@ -368,7 +445,12 @@ $('elbow').addEventListener('click',e=>{
     stop();initCentroids();draw();
   }
 });
-$('resetP').onclick=()=>{$('k').value=4;$('kn').value=4;$('init').value='random';kSync();computeElbow();};
+$('resetP').onclick=()=>{$('k').value=4;$('kn').value=4;$('init').value='random';$('comp').checked=false;comp=false;$('kb').value=8;$('kbn').value=8;$('initb').value='random';kSync();computeElbow();};
+$('comp').onchange=e=>{comp=e.target.checked;stop();initCentroids();initCentroidsB();draw();};
+function kbSync(){k_B=+$('kb').value;$('kbn').value=k_B;stop();initCentroidsB();draw();}
+$('kb').oninput=kbSync;
+$('kbn').oninput=()=>{let v=Math.round(+$('kbn').value);if(isNaN(v))v=8;v=Math.min(8,Math.max(1,v));$('kb').value=v;kbSync();};
+$('initb').onchange=()=>{stop();initCentroidsB();draw();};
 $('kn').oninput=()=>{let v=Math.round(+$('kn').value);if(isNaN(v))v=4;v=Math.min(8,Math.max(1,v));$('k').value=v;kSync();};
 $('init').onchange=()=>{stop();initCentroids();computeElbow();draw();};
 function resetIter(){iter=0;converged=false;}

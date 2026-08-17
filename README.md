@@ -37,6 +37,7 @@ One-page HTML interactive visualizations of machine learning algorithms — แ�
 - 📈 Live Metrics — แผงตัวเลขผลลัพธ์อัปเดตทันทีทุกหน้า (loss, accuracy, R², margin, SSE, attention ฯลฯ)
 - 📉 Learning Curve — กราฟการเรียนรู้ในทุกหัวข้อ (loss/accuracy ตาม step, SSE ตาม iteration, attention entropy ฯลฯ)
 - 🔢 Confusion Matrix — แผนภูมิความสับสน + Precision/Recall/F1 อัปเดตสดในโมเดลจำแนก (Logistic, kNN, SVM, Random Forest)
+- 🔀 โหมดเปรียบเทียบ A/B — วาง 2 ชุดพารามิเตอร์บนกราฟเดียวกัน (LR, MLP, SVM: เทียบ C, k-Means: เทียบ k/init, Decision Tree: เทียบความลึก)
 - 📊 Visualize กลไกของแต่ละอัลกอริทึมแบบทีละขั้นตอน (gradient descent, split, attention, Q-table ฯลฯ)
 - 🇹🇭 คำอธิบายภาษาไทยในทุกไฟล์
 - 📦 ไม่มี dependency ภายนอก — ใช้แค่ HTML + CSS + JavaScript (Canvas)
