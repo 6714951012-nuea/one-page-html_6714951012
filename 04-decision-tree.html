@@ -59,6 +59,7 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     </label>
     <button id="c0" class="activeCls" style="background:#fee2e2;color:#b91c1c">เพิ่ม Class 0 (แดง)</button>
     <button id="c1" style="background:#dbeafe;color:#1d4ed8">เพิ่ม Class 1 (น้ำเงิน)</button>
+    <button id="resetP" class="danger">↺ ค่าเริ่มต้น</button>
     <span class="hint">กด "ขั้นถัดไป" ดูต้นไม้สร้างทีละกิ่ง • คลิกบนกราฟเพื่อเพิ่มจุดเอง</span>
   </div>
   <div class="stats">
@@ -255,6 +256,7 @@ $('step').onclick=()=>{
 function depthSync(){const v=+$('depth').value;$('dn').value=v;clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';build();}
 function minsSync(){const v=+$('mins').value;$('msn').value=v;clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';build();}
 $('depth').oninput=depthSync;
+$('resetP').onclick=()=>{$('depth').value=4;$('dn').value=4;$('mins').value=8;$('msn').value=8;selC=0;$('c0').classList.add('activeCls');$('c1').classList.remove('activeCls');build();};
 $('dn').oninput=()=>{let v=Math.round(+$('dn').value);if(isNaN(v))v=4;v=Math.min(6,Math.max(1,v));$('depth').value=v;depthSync();};
 $('mins').oninput=minsSync;
 $('msn').oninput=()=>{let v=Math.round(+$('msn').value);if(isNaN(v))v=8;v=Math.min(30,Math.max(4,v));$('mins').value=v;minsSync();};

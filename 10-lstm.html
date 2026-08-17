@@ -55,6 +55,7 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <button id="seq2">L S T M !</button>
     <input id="seqtext" type="text" value="Hello!" style="border:1px solid #cbd5e1;border-radius:8px;padding:9px 12px;font-size:14px;width:110px">
     <button id="seqgo">ใช้ลำดับนี้</button>
+    <button id="resetP" class="danger">↺ ค่าเริ่มต้น</button>
     <span class="hint">เลือก/พิมพ์ลำดับอินพุตเองได้ (ใช้ตัวอักษร A–C, H–T, !)</span>
   </div>
   <div class="stats">
@@ -244,6 +245,7 @@ $('play').onclick=()=>{
 $('step').onclick=()=>{stop();$('play').textContent='▶ เล่น (ทีละ timestep)';doStep();};
 function hsizeSync(){const v=+$('hsize').value;$('hsn').value=v;initWeights();draw();}
 $('hsize').oninput=hsizeSync;
+$('resetP').onclick=()=>{$('hsize').value=4;$('hsn').value=4;seq=['H','e','l','l','o','!'];$('seqtext').value='Hello!';useSeq($('seq1'));};
 $('hsn').oninput=()=>{let v=Math.round(+$('hsn').value);if(isNaN(v))v=4;v=Math.min(6,Math.max(2,v));$('hsize').value=v;hsizeSync();};
 function useSeq(btn){
   for(const id of ['seq1','seq2']){const b=document.getElementById(id);if(b)b.classList.remove('activeCls');}

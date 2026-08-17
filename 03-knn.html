@@ -57,6 +57,7 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
       <option value="euclid">Euclidean</option>
       <option value="manhattan">Manhattan</option>
     </select>
+    <button id="resetP" class="danger">↺ ค่าเริ่มต้น</button>
     <span class="hint">💡 เลื่อนเมาส์เพื่อทดสอบจุดใหม่ • คลิกเพื่อเพิ่มจุด</span>
   </div>
   <div class="stats">
@@ -213,6 +214,7 @@ $('rand').onclick=()=>{genData(36);draw();};
 $('clear').onclick=()=>{pts=[];computeBoundary();draw();};
 function kSync(){k=+$('k').value;$('kn').value=k;computeBoundary();draw();}
 $('k').oninput=kSync;
+$('resetP').onclick=()=>{k=5;$('k').value=5;$('kn').value=5;metric='euclid';$('metric').value='euclid';computeBoundary();draw();};
 $('kn').oninput=()=>{let v=Math.round(+$('kn').value);if(isNaN(v))v=5;v=Math.min(15,Math.max(1,v));$('k').value=v;kSync();};
 $('metric').onchange=e=>{metric=e.target.value;computeBoundary();draw();};
 $('cls0').onclick=()=>{selClass=0;$('cls0').classList.add('activeCls');$('cls1').classList.remove('activeCls');};

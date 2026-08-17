@@ -62,6 +62,7 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     </label>
     <button id="c0" class="activeCls" style="background:#fee2e2;color:#b91c1c">เพิ่ม Class 0 (แดง)</button>
     <button id="c1" style="background:#dbeafe;color:#1d4ed8">เพิ่ม Class 1 (น้ำเงิน)</button>
+    <button id="resetP" class="danger">↺ ค่าเริ่มต้น</button>
     <span class="hint">ต้นไม้แต่ละต้นโหวต แล้วรวมกันเป็นคำตอบสุดท้าย • คลิกบนกราฟเพิ่มจุดเอง</span>
   </div>
   <div class="stats">
@@ -257,6 +258,7 @@ $('train').onclick=()=>{
 function ntSync(){const v=+$('nt').value;$('ntn').value=v;if(running){clearTimer();running=false;$('train').textContent='🌲 ฝึก Random Forest';}reset();}
 function depthSync(){const v=+$('depth').value;$('depthn').value=v;if(running){clearTimer();running=false;$('train').textContent='🌲 ฝึก Random Forest';}reset();}
 $('nt').oninput=ntSync;
+$('resetP').onclick=()=>{$('nt').value=5;$('ntn').value=5;$('depth').value=3;$('depthn').value=3;selC=0;$('c0').classList.add('activeCls');$('c1').classList.remove('activeCls');reset();};
 $('ntn').oninput=()=>{let v=Math.round(+$('ntn').value);if(isNaN(v))v=5;v=Math.min(10,Math.max(2,v));$('nt').value=v;ntSync();};
 $('depth').oninput=depthSync;
 $('depthn').oninput=()=>{let v=Math.round(+$('depthn').value);if(isNaN(v))v=3;v=Math.min(5,Math.max(2,v));$('depth').value=v;depthSync();};

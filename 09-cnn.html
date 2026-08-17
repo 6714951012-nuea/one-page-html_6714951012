@@ -80,6 +80,7 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
       <option value="avg">Average Pooling</option>
     </select>
     <label class="check"><input type="checkbox" id="relu" checked> ใช้ ReLU (ค่าลบ→0)</label>
+    <button id="resetP" class="danger">↺ ค่าเริ่มต้น</button>
     <span class="hint">🎨 คลิก/ลากบนภาพซ้ายเพื่อวาดเองได้</span>
   </div>
   <div class="stats">
@@ -233,6 +234,7 @@ $('reset').onclick=()=>{clearTimer();playing=false;$('play').textContent='▶ �
 $('kselect').onchange=e=>{kid=e.target.value;clearTimer();playing=false;$('play').textContent='▶ เล่น';computeAll();pos=0;drawAll();};
 $('pselect').onchange=()=>{clearTimer();playing=false;$('play').textContent='▶ เล่น';computeAll();pos=0;drawAll();};
 $('relu').onchange=()=>{computeAll();drawAll();};
+$('resetP').onclick=()=>{kid='edge';$('kselect').value='edge';$('pselect').value='max';$('relu').checked=true;computeAll();pos=0;drawAll();};
 const inpEl=$('inp');
 function paintAt(e){
   const r=inpEl.getBoundingClientRect();

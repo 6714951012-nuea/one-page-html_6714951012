@@ -57,6 +57,7 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
       <option value="random">Init: Random</option>
       <option value="kpp">Init: K-Means++</option>
     </select>
+    <button id="resetP" class="danger">↺ ค่าเริ่มต้น</button>
     <span class="hint">💡 คลิกบนกราฟเพื่อเพิ่มจุดเอง</span>
   </div>
   <div class="stats">
@@ -228,6 +229,7 @@ $('rand').onclick=()=>{stop();genData(90);draw();};
 $('reset').onclick=()=>{stop();initCentroids();draw();};
 function kSync(){k=+$('k').value;$('kn').value=k;stop();initCentroids();draw();}
 $('k').oninput=kSync;
+$('resetP').onclick=()=>{$('k').value=4;$('kn').value=4;$('init').value='random';kSync();};
 $('kn').oninput=()=>{let v=Math.round(+$('kn').value);if(isNaN(v))v=4;v=Math.min(6,Math.max(2,v));$('k').value=v;kSync();};
 $('init').onchange=()=>{stop();initCentroids();draw();};
 function resetIter(){iter=0;converged=false;}
