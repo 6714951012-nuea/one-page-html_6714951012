@@ -23,6 +23,7 @@ button.primary{background:var(--accent);color:#fff}
 button.danger{background:#fee2e2;color:#b91c1c}
 label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
 input[type=range]{accent-color:var(--accent)}
+.num{width:76px;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;font-size:14px;font-weight:600;text-align:center;background:#fff}
 select{border:1px solid #cbd5e1;border-radius:8px;padding:9px 12px;font-size:14px;background:#fff}
 .stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;font-size:13px}
 .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}
@@ -50,12 +51,13 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <button id="reset" class="danger">รีเซ็ต</button>
     <label class="slider">k =
       <input type="range" id="k" min="2" max="6" value="4">
-      <b id="kv">4</b>
+      <input type="number" id="kn" class="num" min="2" max="6" step="1" value="4">
     </label>
     <select id="init">
       <option value="random">Init: Random</option>
       <option value="kpp">Init: K-Means++</option>
     </select>
+    <span class="hint">💡 คลิกบนกราฟเพื่อเพิ่มจุดเอง</span>
   </div>
   <div class="stats">
     <div class="stat">Iteration: <b id="iter">0</b></div>
@@ -108,6 +110,7 @@ function initCentroids(){
   iter=0;converged=false;$('state').textContent='ยังไม่ลู่เข้า';
 }
 function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
+function inv(c){return {x:(c.x-L)/(W-L-R), y:1-(c.y-T)/(H-T-B)}}
 
 function assignStep(){
   for(let i=0;i<pts.length;i++){
@@ -210,9 +213,18 @@ function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=null;}
 $('auto').onclick=()=>{running?stop():(resetIter(),start());};
 $('step').onclick=()=>{stop();if(!converged)doIteration();};
 $('cent').onclick=()=>{stop();initCentroids();draw();};
+canvas.addEventListener('click',e=>{
+  const r=canvas.getBoundingClientRect();
+  const c=inv({x:(e.clientX-r.left)*(W/r.width),y:(e.clientY-r.top)*(H/r.height)});
+  if(c.x<0.02||c.x>0.98||c.y<0.02||c.y>0.98)return;
+  pts.push({x:Math.max(0,Math.min(1,c.x)),y:Math.max(0,Math.min(1,c.y))});
+  stop();initCentroids();draw();
+});
 $('rand').onclick=()=>{stop();genData(90);draw();};
 $('reset').onclick=()=>{stop();initCentroids();draw();};
-$('k').oninput=e=>{k=+e.target.value;$('kv').textContent=k;stop();initCentroids();draw();};
+function kSync(){k=+$('k').value;$('kn').value=k;stop();initCentroids();draw();}
+$('k').oninput=kSync;
+$('kn').oninput=()=>{let v=Math.round(+$('kn').value);if(isNaN(v))v=4;v=Math.min(6,Math.max(2,v));$('k').value=v;kSync();};
 $('init').onchange=()=>{stop();initCentroids();draw();};
 function resetIter(){iter=0;converged=false;}
 

@@ -32,6 +32,8 @@ button.danger{background:#fee2e2;color:#b91c1c}
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
 label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
 input[type=range]{accent-color:var(--accent)}
+.num{width:76px;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;font-size:14px;font-weight:600;text-align:center;background:#fff}
+.activeCls{border:3px solid #0f172a}
 .info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
 .info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
 code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
@@ -52,13 +54,15 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <button id="reset" class="danger">รีเซ็ต</button>
     <label class="slider">จำนวนต้นไม้
       <input type="range" id="nt" min="2" max="10" value="5">
-      <b id="ntv">5</b>
+      <input type="number" id="ntn" class="num" min="2" max="10" step="1" value="5">
     </label>
     <label class="slider">ความลึกสูงสุด
       <input type="range" id="depth" min="2" max="5" value="3">
-      <b id="depthv">3</b>
+      <input type="number" id="depthn" class="num" min="2" max="5" step="1" value="3">
     </label>
-    <span class="hint">ต้นไม้แต่ละต้นโหวต แล้วรวมกันเป็นคำตอบสุดท้าย</span>
+    <button id="c0" class="activeCls" style="background:#fee2e2;color:#b91c1c">เพิ่ม Class 0 (แดง)</button>
+    <button id="c1" style="background:#dbeafe;color:#1d4ed8">เพิ่ม Class 1 (น้ำเงิน)</button>
+    <span class="hint">ต้นไม้แต่ละต้นโหวต แล้วรวมกันเป็นคำตอบสุดท้าย • คลิกบนกราฟเพิ่มจุดเอง</span>
   </div>
   <div class="stats">
     <div class="stat">ต้นไม้ที่ฝึกแล้ว: <b id="done">0 / 5</b></div>
@@ -80,7 +84,7 @@ const L=58,R=20,T=26,B=46;
 const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
 const C0=[239,68,68], C1=[59,130,246];
-let pts=[], trees=[], trained=0, running=false, timer=null;
+let pts=[], trees=[], trained=0, running=false, timer=null, selC=0;
 function treesN(){return +$('nt').value;}
 function depthN(){return +$('depth').value;}
 
@@ -97,6 +101,7 @@ function genData(n){
   reset();
 }
 function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
+function inv(c){return {x:(c.x-L)/(W-L-R), y:1-(c.y-T)/(H-T-B)}}
 function reset(){trees=[];trained=0;running=false;clearTimer();$('train').textContent='🌲 ฝึก Random Forest';$('done').textContent='0 / '+treesN();$('acc').textContent='—';setupMinis(treesN());draw();drawMinis();}
 
 function gini(arr){
@@ -237,8 +242,21 @@ $('train').onclick=()=>{
     if(trained>=treesN()){clearTimer();running=false;$('train').textContent='🌲 ฝึก Random Forest';}
   },700);
 };
-$('nt').oninput=()=>{$('ntv').textContent=$('nt').value;if(running){clearTimer();running=false;$('train').textContent='🌲 ฝึก Random Forest';}reset();};
-$('depth').oninput=()=>{$('depthv').textContent=$('depth').value;if(running){clearTimer();running=false;$('train').textContent='🌲 ฝึก Random Forest';}reset();};
+function ntSync(){const v=+$('nt').value;$('ntn').value=v;if(running){clearTimer();running=false;$('train').textContent='🌲 ฝึก Random Forest';}reset();}
+function depthSync(){const v=+$('depth').value;$('depthn').value=v;if(running){clearTimer();running=false;$('train').textContent='🌲 ฝึก Random Forest';}reset();}
+$('nt').oninput=ntSync;
+$('ntn').oninput=()=>{let v=Math.round(+$('ntn').value);if(isNaN(v))v=5;v=Math.min(10,Math.max(2,v));$('nt').value=v;ntSync();};
+$('depth').oninput=depthSync;
+$('depthn').oninput=()=>{let v=Math.round(+$('depthn').value);if(isNaN(v))v=3;v=Math.min(5,Math.max(2,v));$('depth').value=v;depthSync();};
+$('c0').onclick=()=>{selC=0;$('c0').classList.add('activeCls');$('c1').classList.remove('activeCls');};
+$('c1').onclick=()=>{selC=1;$('c1').classList.add('activeCls');$('c0').classList.remove('activeCls');};
+canvas.addEventListener('click',e=>{
+  const r=canvas.getBoundingClientRect();
+  const c=inv({x:(e.clientX-r.left)*(W/r.width),y:(e.clientY-r.top)*(H/r.height)});
+  if(c.x<0.02||c.x>0.98||c.y<0.02||c.y>0.98)return;
+  pts.push({x:Math.max(0,Math.min(1,c.x)),y:Math.max(0,Math.min(1,c.y)),c:selC});
+  reset();
+});
 $('rand').onclick=()=>{genData(110);};
 $('reset').onclick=()=>{reset();};
 

@@ -27,6 +27,7 @@ button.danger{background:#fee2e2;color:#b91c1c}
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
 label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
 input[type=range]{accent-color:var(--accent)}
+.num{width:76px;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;font-size:14px;font-weight:600;text-align:center;background:#fff}
 .info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
 .info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
 code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
@@ -47,11 +48,11 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <button id="clear" class="danger">ล้าง</button>
     <label class="slider">C (regularization)
       <input type="range" id="c" min="0.5" max="20" step="0.5" value="6">
-      <b id="cv">6</b>
+      <input type="number" id="cn" class="num" min="0.5" max="20" step="0.5" value="6">
     </label>
     <label class="slider">Learning rate
       <input type="range" id="lr" min="0.01" max="0.2" step="0.01" value="0.05">
-      <b id="lrv">0.05</b>
+      <input type="number" id="lrn" class="num" min="0.01" max="0.2" step="0.01" value="0.05">
     </label>
     <span class="hint">💡 คลิกเพิ่มจุด • กดปุ่ม C เพื่อสลับคลาสที่เพิ่ม</span>
   </div>
@@ -181,8 +182,12 @@ function loop(){
 function start(){if(!pts.length)return;running=true;$('train').textContent='⏸ หยุด';if(raf)cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
 function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=null;}
 
-$('c').oninput=e=>{$('cv').textContent=(+e.target.value).toFixed(1);resetParams();};
-$('lr').oninput=e=>{$('lrv').textContent=(+e.target.value).toFixed(2);};
+function cSync(){const v=+$('c').value;$('cn').value=v.toFixed(1);resetParams();}
+function lrSync(){const v=+$('lr').value;$('lrn').value=v.toFixed(2);}
+$('c').oninput=cSync;
+$('cn').oninput=()=>{let v=+$('cn').value;if(isNaN(v))v=6;v=Math.min(20,Math.max(0.5,v));$('c').value=v;cSync();};
+$('lr').oninput=lrSync;
+$('lrn').oninput=()=>{let v=+$('lrn').value;if(isNaN(v))v=0.05;v=Math.min(0.2,Math.max(0.01,v));$('lr').value=v;lrSync();};
 $('rand').onclick=()=>{genData(36);draw();};
 $('train').onclick=()=>{if(running){stop();$('train').textContent='เริ่มฝึก (Hinge Loss)';}else{resetParams();start();}};
 $('clear').onclick=()=>{pts=[];resetParams();draw();};

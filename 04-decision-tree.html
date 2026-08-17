@@ -28,6 +28,8 @@ button.danger{background:#fee2e2;color:#b91c1c}
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
 label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
 input[type=range]{accent-color:var(--accent)}
+.num{width:76px;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;font-size:14px;font-weight:600;text-align:center;background:#fff}
+.activeCls{border:3px solid #0f172a}
 .info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
 .info h2{font-size:17px;margin-bottom:8px;color:var(--ink)}
 code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
@@ -49,13 +51,15 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <button id="reset" class="danger">รีเซ็ต</button>
     <label class="slider">ความลึกสูงสุด
       <input type="range" id="depth" min="1" max="6" value="4">
-      <b id="dv">4</b>
+      <input type="number" id="dn" class="num" min="1" max="6" step="1" value="4">
     </label>
     <label class="slider">Min samples/ใบ
       <input type="range" id="mins" min="4" max="30" value="8">
-      <b id="msv">8</b>
+      <input type="number" id="msn" class="num" min="4" max="30" step="1" value="8">
     </label>
-    <span class="hint">กด "ขั้นถัดไป" เพื่อดูต้นไม้สร้างทีละกิ่ง</span>
+    <button id="c0" class="activeCls" style="background:#fee2e2;color:#b91c1c">เพิ่ม Class 0 (แดง)</button>
+    <button id="c1" style="background:#dbeafe;color:#1d4ed8">เพิ่ม Class 1 (น้ำเงิน)</button>
+    <span class="hint">กด "ขั้นถัดไป" ดูต้นไม้สร้างทีละกิ่ง • คลิกบนกราฟเพื่อเพิ่มจุดเอง</span>
   </div>
   <div class="stats">
     <div class="stat">โหนดที่สร้างแล้ว: <b id="revealed">0</b></div>
@@ -80,7 +84,7 @@ const L=58,R=20,T=26,B=46;
 const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
 const C0=[239,68,68], C1=[59,130,246];
-let pts=[], nodes=[], root=null, revealed=0, timer=null, depthCap=4, minS=8;
+let pts=[], nodes=[], root=null, revealed=0, timer=null, depthCap=4, minS=8, selC=0;
 
 function genData(n){
   pts=[];
@@ -95,6 +99,7 @@ function genData(n){
   build();
 }
 function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
+function inv(c){return {x:(c.x-L)/(W-L-R), y:1-(c.y-T)/(H-T-B)}}
 function gini(arr){
   if(!arr.length)return 0;
   const c0=arr.filter(i=>pts[i].c===0).length/arr.length;
@@ -241,8 +246,21 @@ $('step').onclick=()=>{
   clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';
   if(revealed<nodes.length){revealed++;draw();drawTree();}
 };
-$('depth').oninput=()=>{$('dv').textContent=$('depth').value;clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';build();};
-$('mins').oninput=()=>{$('msv').textContent=$('mins').value;clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';build();};
+function depthSync(){const v=+$('depth').value;$('dn').value=v;clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';build();}
+function minsSync(){const v=+$('mins').value;$('msn').value=v;clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';build();}
+$('depth').oninput=depthSync;
+$('dn').oninput=()=>{let v=Math.round(+$('dn').value);if(isNaN(v))v=4;v=Math.min(6,Math.max(1,v));$('depth').value=v;depthSync();};
+$('mins').oninput=minsSync;
+$('msn').oninput=()=>{let v=Math.round(+$('msn').value);if(isNaN(v))v=8;v=Math.min(30,Math.max(4,v));$('mins').value=v;minsSync();};
+$('c0').onclick=()=>{selC=0;$('c0').classList.add('activeCls');$('c1').classList.remove('activeCls');};
+$('c1').onclick=()=>{selC=1;$('c1').classList.add('activeCls');$('c0').classList.remove('activeCls');};
+canvas.addEventListener('click',e=>{
+  const r=canvas.getBoundingClientRect();
+  const c=inv({x:(e.clientX-r.left)*(W/r.width),y:(e.clientY-r.top)*(H/r.height)});
+  if(c.x<0.02||c.x>0.98||c.y<0.02||c.y>0.98)return;
+  pts.push({x:Math.max(0,Math.min(1,c.x)),y:Math.max(0,Math.min(1,c.y)),c:selC});
+  build();
+});
 $('rand').onclick=()=>{genData(110);};
 $('reset').onclick=()=>{revealed=0;clearTimer();$('play').textContent='▶ เล่นอัตโนมัติ';draw();drawTree();};
 
