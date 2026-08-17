@@ -26,6 +26,8 @@ button.danger{background:#fee2e2;color:#b91c1c}
 .stat b{color:var(--accent);font-size:15px}
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
 label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+.check{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600}
+input[type=checkbox]{accent-color:var(--accent)}
 input[type=range]{accent-color:var(--accent)}
 .num{width:76px;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;font-size:14px;font-weight:600;text-align:center;background:#fff}
 .info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
@@ -50,11 +52,18 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
       <input type="range" id="lr" min="0.05" max="2" step="0.05" value="0.55">
       <input type="number" id="lrn" class="num" min="0.05" max="2" step="0.05" value="0.55">
     </label>
+    <label class="check"><input type="checkbox" id="comp"> 🔀 เปรียบเทียบ A/B</label>
+    <label class="slider">LR ของ B
+      <input type="range" id="lrb" min="0.05" max="2" step="0.05" value="2">
+      <input type="number" id="lrbn" class="num" min="0.05" max="2" step="0.05" value="2">
+    </label>
     <button id="resetP" class="danger">↺ ค่าเริ่มต้น</button>
     <span class="hint">💡 คลิกบนกราฟเพื่อเพิ่มจุดเอง</span>
   </div>
   <div class="stats">
     <div class="stat">สมการ: <b id="eq">y = 0.000x + 0.000</b></div>
+    <div class="stat">สมการ B: <b id="eqb">y = 0.000x + 0.000</b></div>
+    <div class="stat">Loss B: <b id="lossb">—</b></div>
     <div class="stat">Loss (MSE): <b id="loss">—</b></div>
     <div class="stat">R²: <b id="r2">—</b></div>
     <div class="stat">ขั้นตอน (steps): <b id="steps">0</b></div>
@@ -71,8 +80,8 @@ const W=canvas.width,H=canvas.height;
 const L=58,R=20,T=26,B=46;
 const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
-let points=[], m=0, b=0, running=false, raf=null, steps=0, diverged=false;
-const lossHist=[];
+let points=[], m=0, b=0, mB=0, bB=0, running=false, raf=null, steps=0, diverged=false, divergedB=false, comp=false;
+const lossHist=[], lossHistB=[];
 
 function genData(n){
   points=[];
@@ -83,13 +92,17 @@ function genData(n){
   }
   resetParams();
 }
-function resetParams(){m=0;b=0;steps=0;lossHist.length=0;diverged=false;stop();$('train').textContent='เริ่ม Gradient Descent';}
+function resetParams(){m=0;b=0;mB=0;bB=0;steps=0;lossHist.length=0;lossHistB.length=0;diverged=false;divergedB=false;stop();$('train').textContent='เริ่ม Gradient Descent';}
 function px(p){return {x:L+p.x*(W-L-R), y:T+(1-p.y)*(H-T-B)}}
 function inv(c){return {x:(c.x-L)/(W-L-R), y:1-(c.y-T)/(H-T-B)}}
 
 function mse(){
   if(!points.length)return 0;
   let s=0;for(const p of points){const e=m*p.x+b-p.y;s+=e*e;}return s/points.length;
+}
+function mseB(){
+  if(!points.length)return 0;
+  let s=0;for(const p of points){const e=mB*p.x+bB-p.y;s+=e*e;}return s/points.length;
 }
 function r2(){
   if(points.length<2)return 0;
@@ -98,13 +111,14 @@ function r2(){
   for(const p of points){const e=p.y-(m*p.x+b);ssres+=e*e;sstot+=(p.y-ybar)**2;}
   return sstot?1-ssres/sstot:0;
 }
-function sgdStep(){
-  const lr=+$('lr').value;
+function sgdStepFor(target){
+  const lr=target==='A'?+$('lr').value:+$('lrb').value;
   let dm=0,db=0;
-  for(const p of points){const e=m*p.x+b-p.y;dm+=-2*p.x*e;db+=-2*e;}
+  for(const p of points){const e=(target==='A'?m:mB)*p.x+(target==='A'?b:bB)-p.y;dm+=2*p.x*e;db+=2*e;}
   dm/=points.length;db/=points.length;
-  m-=lr*dm;b-=lr*db;
+  if(target==='A'){m-=lr*dm;b-=lr*db;}else{mB-=lr*dm;bB-=lr*db;}
 }
+function sgdStep(){sgdStepFor('A');if(comp)sgdStepFor('B');}
 function exactFit(){
   const n=points.length;let sx=0,sy=0,sxx=0,sxy=0;
   for(const p of points){sx+=p.x;sy+=p.y;sxx+=p.x*p.x;sxy+=p.x*p.y;}
@@ -149,31 +163,50 @@ function draw(){
     ctx.beginPath();ctx.arc(c.x,c.y,5,0,Math.PI*2);
     ctx.fillStyle='#0ea5e9';ctx.fill();ctx.lineWidth=1.5;ctx.strokeStyle='#0369a1';ctx.stroke();
   }
-  // current regression line
+  // config B regression line (เปรียบเทียบ)
+  if(comp){
+    const aB=px({x:0,y:bB}), dB=px({x:1,y:mB+bB});
+    ctx.strokeStyle='#f97316';ctx.lineWidth=3;ctx.setLineDash([8,5]);
+    ctx.beginPath();ctx.moveTo(aB.x,aB.y);ctx.lineTo(dB.x,dB.y);ctx.stroke();ctx.setLineDash([]);
+  }
+  // current regression line (config A)
   const a=px({x:0,y:b}), d=px({x:1,y:m+b});
   ctx.strokeStyle='#2563eb';ctx.lineWidth=3.5;
   ctx.shadowColor='rgba(37,99,235,.35)';ctx.shadowBlur=8;
   ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(d.x,d.y);ctx.stroke();
   ctx.shadowBlur=0;
 
-  // loss chart inset
-  if(lossHist.length>1){
-    const iw=170, ih=74, ix=W-R-iw-12, iy=T+12;
+  // loss chart inset (A/B)
+  if(lossHist.length>1||(comp&&lossHistB.length>1)){
+    const iw=190, ih=86, ix=W-R-iw-12, iy=T+12;
     ctx.fillStyle='rgba(255,255,255,.93)';ctx.strokeStyle='#e2e8f0';
     ctx.beginPath();ctx.roundRect(ix,iy,iw,ih,8);ctx.fill();ctx.stroke();
     ctx.fillStyle='#64748b';ctx.font='10px sans-serif';ctx.textAlign='left';
-    ctx.fillText('Loss (MSE)',ix+8,iy+14);
-    const max=Math.max(...lossHist), min=Math.min(...lossHist);
-    const rng=Math.max(max-min,1e-9);
-    ctx.strokeStyle='#f43f5e';ctx.lineWidth=1.8;ctx.beginPath();
-    lossHist.forEach((v,i)=>{
-      const x=ix+8+(iw-16)*i/(lossHist.length-1);
-      const y=iy+ih-9-(ih-22)*(v-min)/rng;
-      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
-    });
-    ctx.stroke();
-    ctx.fillStyle='#f43f5e';ctx.font='bold 11px sans-serif';
-    ctx.fillText(lossHist[lossHist.length-1].toFixed(4),ix+8,iy+ih-9);
+    ctx.fillText('Loss (MSE)',ix+8,iy+13);
+    ctx.fillStyle='#2563eb';ctx.fillRect(ix+8,iy+20,12,4);
+    ctx.fillStyle='#64748b';ctx.fillText('A (lr='+(+$('lr').value).toFixed(2)+')',ix+24,iy+24);
+    if(comp){
+      ctx.fillStyle='#f97316';ctx.fillRect(ix+8,iy+32,12,4);
+      ctx.fillStyle='#64748b';ctx.fillText('B (lr='+(+$('lrb').value).toFixed(2)+')',ix+24,iy+36);
+    }
+    const plotTop=iy+40;
+    const all=[...(comp?lossHistB:[]),...lossHist];
+    if(all.length>1){
+      const max=Math.max(...all),min=Math.min(...all);
+      const rng=Math.max(max-min,1e-9);
+      const ph=iy+ih-8-plotTop;
+      const series=[{h:lossHist,c:'#2563eb'},...(comp?[{h:lossHistB,c:'#f97316'}]:[])];
+      for(const s of series){
+        if(s.h.length<2)continue;
+        ctx.strokeStyle=s.c;ctx.lineWidth=2;ctx.beginPath();
+        s.h.forEach((v,i)=>{
+          const x=ix+8+(iw-16)*i/(s.h.length-1);
+          const y=plotTop+ph*(1-(v-min)/rng);
+          i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+        });
+        ctx.stroke();
+      }
+    }
   }
 
   $('eq').textContent='y = '+m.toFixed(3)+'x + '+b.toFixed(3);
@@ -181,6 +214,8 @@ function draw(){
   $('n').textContent=points.length;
   $('steps').textContent=steps;
   $('r2').textContent=r2().toFixed(3);
+  $('eqb').textContent='y = '+mB.toFixed(3)+'x + '+bB.toFixed(3);
+  $('lossb').textContent=(divergedB?'∞ ':'')+(comp?(points.length?mseB().toFixed(4):'—'):'—');
 }
 
 function loop(){
@@ -190,6 +225,11 @@ function loop(){
   lossHist.push(cur);
   if(cur>1e4){diverged=true;stop();$('train').textContent='เริ่ม Gradient Descent';}
   else if(cur<0.00035||steps>4000){stop();$('train').textContent='เริ่ม Gradient Descent';}
+  if(comp){
+    const curB=mseB();
+    lossHistB.push(curB);
+    if(curB>1e4){divergedB=true;}
+  }
   draw();
   raf=requestAnimationFrame(loop);
 }
@@ -198,7 +238,10 @@ function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=null;}
 
 function lrSync(){const v=+$('lr').value;$('lrn').value=v.toFixed(2);}
 $('lr').oninput=lrSync;
-$('resetP').onclick=()=>{$('lr').value=0.55;lrSync();resetParams();draw();};
+$('comp').onchange=e=>{comp=e.target.checked;resetParams();draw();};
+$('lrb').oninput=e=>{$('lrbn').value=(+e.target.value).toFixed(2);};
+$('lrbn').oninput=()=>{let v=+$('lrbn').value;if(isNaN(v))v=2;v=Math.min(2,Math.max(0.05,v));$('lrb').value=v;$('lrbn').value=v.toFixed(2);};
+$('resetP').onclick=()=>{$('lr').value=0.55;lrSync();$('comp').checked=false;comp=false;$('lrb').value=2;$('lrbn').value=2;resetParams();draw();};
 $('lrn').oninput=()=>{let v=+$('lrn').value;if(isNaN(v))v=0.55;v=Math.min(2,Math.max(0.05,v));$('lr').value=v;lrSync();};
 $('rand').onclick=()=>{genData(24);draw();};
 $('train').onclick=()=>{if(running){stop();$('train').textContent='เริ่ม Gradient Descent';}else{resetParams();start();}};

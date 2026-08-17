@@ -28,6 +28,7 @@ button.pat.active{background:var(--accent);border-color:var(--accent);color:#fff
 .stat b{color:var(--accent);font-size:15px}
 .hint{color:var(--mut);font-size:13px;margin-left:auto}
 label.slider{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+.check{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600}
 input[type=range]{accent-color:var(--accent)}
 .num{width:76px;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;font-size:14px;font-weight:600;text-align:center;background:#fff}
 .info{max-width:880px;width:100%;background:var(--card);border-radius:16px;box-shadow:0 8px 24px rgba(15,23,42,.08);padding:20px;font-size:14.5px;line-height:1.7;color:#334155}
@@ -59,6 +60,11 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
       <input type="range" id="lr" min="0.1" max="1.5" step="0.05" value="0.6">
       <input type="number" id="lrn" class="num" min="0.1" max="1.5" step="0.05" value="0.6">
     </label>
+    <label class="check"><input type="checkbox" id="comp"> 🔀 เปรียบเทียบ A/B</label>
+    <label class="slider">LR ของ B
+      <input type="range" id="lrb" min="0.1" max="1.5" step="0.05" value="0.1">
+      <input type="number" id="lrbn" class="num" min="0.1" max="1.5" step="0.05" value="0.1">
+    </label>
     <button id="resetP" class="danger">↺ ค่าเริ่มต้น</button>
     <span class="hint">💡 คลิกที่ปุ่มอินพุต หรือคลิกที่วงกลมอินพุตเพื่อทดสอบ forward pass</span>
   </div>
@@ -69,6 +75,7 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <div class="stat">ผลทำนาย: <b id="out">—</b></div>
     <div class="stat">คำตอบจริง: <b id="true">0</b></div>
     <div class="stat">Accuracy (XOR): <b id="acc">0/4</b></div>
+    <div class="stat">Acc B (XOR): <b id="accb">—</b></div>
   </div>
 </div>
 <div class="info">
@@ -81,43 +88,48 @@ const W=canvas.width,H=canvas.height;
 const $=id=>document.getElementById(id);
 const rand=(a,b)=>a+Math.random()*(b-a);
 const patterns=[[0,0,0],[0,1,1],[1,0,1],[1,1,0]];
-let W1,b1,W2,b2, sel=[0,0], running=false, raf=null, epoch=0, HN=4;
-const lossHist=[];
+let netA=null, netB=null, sel=[0,0], running=false, raf=null, epoch=0, HN=4, comp=false;
+const lossHist=[], lossHistB=[];
 
+function mkNet(){
+  return {W1:Array.from({length:HN},()=>[rand(-1,1),rand(-1,1)]),b1:Array.from({length:HN},()=>rand(-1,1)),W2:Array.from({length:HN},()=>rand(-1,1)),b2:rand(-1,1)};
+}
 function initW(){
   HN=+$('hn').value;
-  W1=Array.from({length:HN},()=>[rand(-1,1),rand(-1,1)]);
-  b1=Array.from({length:HN},()=>rand(-1,1));
-  W2=Array.from({length:HN},()=>rand(-1,1));
-  b2=rand(-1,1);
-  epoch=0;lossHist.length=0;stop();$('train').textContent='▶ ฝึก (Backprop)';
+  netA=mkNet();netB=mkNet();
+  epoch=0;lossHist.length=0;lossHistB.length=0;stop();$('train').textContent='▶ ฝึก (Backprop)';
 }
 const sig=t=>1/(1+Math.exp(-t));
-function forward(x){
-  const h=W1.map((row,i)=>sig(row[0]*x[0]+row[1]*x[1]+b1[i]));
-  const o=sig(W2.reduce((s,w,i)=>s+w*h[i],0)+b2);
+function forward(net,x){
+  const h=net.W1.map((row,i)=>sig(row[0]*x[0]+row[1]*x[1]+net.b1[i]));
+  const o=sig(net.W2.reduce((s,w,i)=>s+w*h[i],0)+net.b2);
   return {h,o};
 }
-function mseLoss(){
+function mseOf(net){
   let s=0;
-  for(const [a,b,t] of patterns){const o=forward([a,b]).o;s+=(o-t)**2;}
+  for(const [a,b,t] of patterns){const o=forward(net,[a,b]).o;s+=(o-t)**2;}
   return s/4;
 }
-function trainEpoch(){
-  const lr=+$('lr').value;
+function accOf(net){
+  let ok=0;
+  for(const [a,b,t] of patterns)if((forward(net,[a,b]).o>=0.5?1:0)===t)ok++;
+  return ok;
+}
+function trainEpochFor(net,lr){
   for(const [a,b,t] of patterns){
-    const {h,o}=forward([a,b]);
+    const {h,o}=forward(net,[a,b]);
     const e=o-t;
     const dO=e*o*(1-o);
-    for(let i=0;i<HN;i++){W2[i]-=lr*dO*h[i];}
-    b2-=lr*dO;
+    for(let i=0;i<HN;i++){net.W2[i]-=lr*dO*h[i];}
+    net.b2-=lr*dO;
     for(let i=0;i<HN;i++){
-      const dh=dO*W2[i]*h[i]*(1-h[i]);
-      W1[i][0]-=lr*dh*a;W1[i][1]-=lr*dh*b;b1[i]-=lr*dh;
+      const dh=dO*net.W2[i]*h[i]*(1-h[i]);
+      net.W1[i][0]-=lr*dh*a;net.W1[i][1]-=lr*dh*b;net.b1[i]-=lr*dh;
     }
   }
   epoch++;
 }
+function trainEpoch(){trainEpochFor(netA,+$('lr').value);if(comp)trainEpochFor(netB,+$('lrb').value);}
 
 // layout
 const nX=[90,90], nHx=320, nOx=505;
@@ -130,15 +142,15 @@ function draw(){
   // edges W1
   for(let i=0;i<HN;i++){
     for(let j=0;j<2;j++){
-      edge(nX[j],nY[j],nHx,hy(i),W1[i][j]);
+      edge(nX[j],nY[j],nHx,hy(i),netA.W1[i][j]);
     }
   }
   // edges W2
   for(let i=0;i<HN;i++){
-    edge(nHx,hy(i),nOx,nOy,W2[i]);
+    edge(nHx,hy(i),nOx,nOy,netA.W2[i]);
   }
   // hidden nodes
-  const {h,o}=forward(sel);
+  const {h,o}=forward(netA,sel);
   for(let i=0;i<HN;i++){
     node(nHx,hy(i),RH,h[i],'h'+i);
   }
@@ -158,31 +170,45 @@ function draw(){
   ctx.fillStyle='#64748b';ctx.font='12px sans-serif';ctx.textAlign='center';
   ctx.fillText('y ̂',nOx,nOy+RO+20);
 
-  // loss chart inset
-  if(lossHist.length>2){
-    const iw=200, ih=70, ix=W-iw-14, iy=12;
+  // loss chart inset (A/B)
+  if(lossHist.length>2||(comp&&lossHistB.length>2)){
+    const iw=210, ih=88, ix=W-iw-14, iy=12;
     ctx.fillStyle='rgba(255,255,255,.93)';ctx.strokeStyle='#e2e8f0';
     ctx.beginPath();ctx.roundRect(ix,iy,iw,ih,8);ctx.fill();ctx.stroke();
     ctx.fillStyle='#64748b';ctx.font='10px sans-serif';ctx.textAlign='left';
     ctx.fillText('Loss (MSE) — 4 รูปแบบ XOR',ix+8,iy+13);
-    const max=Math.max(...lossHist), min=Math.min(...lossHist);
-    const rng=Math.max(max-min,1e-9);
-    ctx.strokeStyle='#f43f5e';ctx.lineWidth=1.8;ctx.beginPath();
-    lossHist.forEach((v,i)=>{
-      const x=ix+8+(iw-16)*i/(lossHist.length-1);
-      const y=iy+ih-9-(ih-22)*(v-min)/rng;
-      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
-    });
-    ctx.stroke();
+    ctx.fillStyle='#2563eb';ctx.fillRect(ix+8,iy+20,12,4);
+    ctx.fillStyle='#64748b';ctx.fillText('A (lr='+(+$('lr').value).toFixed(2)+')',ix+24,iy+24);
+    if(comp){
+      ctx.fillStyle='#f97316';ctx.fillRect(ix+8,iy+32,12,4);
+      ctx.fillStyle='#64748b';ctx.fillText('B (lr='+(+$('lrb').value).toFixed(2)+')',ix+24,iy+36);
+    }
+    const plotTop=iy+42;
+    const all=[...(comp?lossHistB:[]),...lossHist];
+    if(all.length>2){
+      const max=Math.max(...all),min=Math.min(...all);
+      const rng=Math.max(max-min,1e-9);
+      const ph=iy+ih-8-plotTop;
+      const series=[{h:lossHist,c:'#2563eb'},...(comp?[{h:lossHistB,c:'#f97316'}]:[])];
+      for(const s of series){
+        if(s.h.length<2)continue;
+        ctx.strokeStyle=s.c;ctx.lineWidth=2;ctx.beginPath();
+        s.h.forEach((v,i)=>{
+          const x=ix+8+(iw-16)*i/(s.h.length-1);
+          const y=plotTop+ph*(1-(v-min)/rng);
+          i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+        });
+        ctx.stroke();
+      }
+    }
   }
   $('ep').textContent=epoch;
-  $('loss').textContent=mseLoss().toFixed(5);
+  $('loss').textContent=mseOf(netA).toFixed(5);
   $('inp').textContent='('+sel[0]+', '+sel[1]+')';
   $('out').textContent=o.toFixed(3);
   $('true').textContent=(sel[0]^sel[1]);
-  let okp=0;
-  for(const [a,b,t] of patterns)if((forward([a,b]).o>=0.5?1:0)===t)okp++;
-  $('acc').textContent=okp+'/4';
+  $('acc').textContent=accOf(netA)+'/4';
+  $('accb').textContent=comp?accOf(netB)+'/4':'—';
 }
 function edge(x1,y1,x2,y2,w){
   const a=Math.min(1,Math.abs(w));
@@ -203,8 +229,9 @@ function node(x,y,r,val,label){
 function loop(){
   if(!running)return;
   for(let i=0;i<80;i++)trainEpoch();
-  lossHist.push(mseLoss());
-  if(mseLoss()<0.0005||epoch>60000){stop();$('train').textContent='▶ ฝึก (Backprop)';}
+  lossHist.push(mseOf(netA));
+  if(comp)lossHistB.push(mseOf(netB));
+  if((mseOf(netA)<0.0005&&(!comp||mseOf(netB)<0.0005))||epoch>60000){stop();$('train').textContent='▶ ฝึก (Backprop)';}
   draw();
   raf=requestAnimationFrame(loop);
 }
@@ -214,7 +241,10 @@ function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=null;}
 function hnSync(){const v=+$('hn').value;$('hnn').value=v;initW();draw();}
 function lrSync(){const v=+$('lr').value;$('lrn').value=v.toFixed(2);}
 $('hn').oninput=hnSync;
-$('resetP').onclick=()=>{$('hn').value=4;$('hnn').value=4;$('lr').value=0.6;$('lrn').value=0.6;hnSync();lrSync();};
+$('comp').onchange=e=>{comp=e.target.checked;initW();draw();};
+$('lrb').oninput=e=>{$('lrbn').value=(+e.target.value).toFixed(2);};
+$('lrbn').oninput=()=>{let v=+$('lrbn').value;if(isNaN(v))v=0.1;v=Math.min(1.5,Math.max(0.1,v));$('lrb').value=v;$('lrbn').value=v.toFixed(2);};
+$('resetP').onclick=()=>{$('hn').value=4;$('hnn').value=4;$('lr').value=0.6;$('lrn').value=0.6;$('comp').checked=false;comp=false;$('lrb').value=0.1;$('lrbn').value=0.1;hnSync();lrSync();};
 $('hnn').oninput=()=>{let v=Math.round(+$('hnn').value);if(isNaN(v))v=4;v=Math.min(8,Math.max(2,v));$('hn').value=v;hnSync();};
 $('lr').oninput=lrSync;
 $('lrn').oninput=()=>{let v=+$('lrn').value;if(isNaN(v))v=0.6;v=Math.min(1.5,Math.max(0.1,v));$('lr').value=v;lrSync();};
