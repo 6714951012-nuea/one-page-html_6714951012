@@ -61,6 +61,7 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <div class="stat">ความกว้าง Margin: <b id="margin">—</b></div>
     <div class="stat">‖w‖: <b id="wnorm">—</b></div>
     <div class="stat">Accuracy: <b id="acc">—</b></div>
+    <div class="stat">ผิดคลาส: <b id="mis">0</b></div>
   </div>
 </div>
 <div class="info">
@@ -170,6 +171,9 @@ function draw(){
   $('margin').textContent=nw>1e-9?(2/nw).toFixed(3):'—';
   $('wnorm').textContent=nw.toFixed(3);
   $('acc').textContent=pts.length?accuracy().toFixed(1)+'%':'—';
+  let mc=0;
+  for(const p of pts)if((f(p)>=0?1:0)!==p.c)mc++;
+  $('mis').textContent=mc;
 }
 
 function loop(){
@@ -182,8 +186,8 @@ function loop(){
 function start(){if(!pts.length)return;running=true;$('train').textContent='⏸ หยุด';if(raf)cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
 function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=null;}
 
-function cSync(){const v=+$('c').value;$('cn').value=v.toFixed(1);resetParams();}
-function lrSync(){const v=+$('lr').value;$('lrn').value=v.toFixed(2);}
+function cSync(){const v=+$('c').value;$('cn').value=v.toFixed(1);resetParams();draw();}
+function lrSync(){const v=+$('lr').value;$('lrn').value=v.toFixed(2);draw();}
 $('c').oninput=cSync;
 $('cn').oninput=()=>{let v=+$('cn').value;if(isNaN(v))v=6;v=Math.min(20,Math.max(0.5,v));$('c').value=v;cSync();};
 $('lr').oninput=lrSync;

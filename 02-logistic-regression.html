@@ -59,6 +59,7 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <div class="stat">Loss: <b id="loss">—</b></div>
     <div class="stat">Accuracy: <b id="acc">—</b></div>
     <div class="stat">ขั้นตอน (epoch): <b id="ep">0</b></div>
+    <div class="stat">ผิดคลาส: <b id="mis">0</b></div>
   </div>
 </div>
 <div class="info">
@@ -158,6 +159,9 @@ function draw(){
   $('loss').textContent=points.length?logLoss().toFixed(4):'—';
   $('acc').textContent=points.length?accuracy().toFixed(1)+'%':'—';
   $('ep').textContent=epochs;
+  let mc=0;
+  for(const p of points)if((predict(p)>=0.5?1:0)!==p.c)mc++;
+  $('mis').textContent=mc;
 }
 
 function loop(){

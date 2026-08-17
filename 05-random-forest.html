@@ -67,6 +67,7 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
   <div class="stats">
     <div class="stat">ต้นไม้ที่ฝึกแล้ว: <b id="done">0 / 5</b></div>
     <div class="stat">Accuracy (ชุดฝึก): <b id="acc">—</b></div>
+    <div class="stat">Acc เฉลี่ยต่อต้น: <b id="sacc">—</b></div>
   </div>
 </div>
 <div class="card">
@@ -152,6 +153,16 @@ function ensembleVote(x,y){
   for(const t of trees)v+=treePredict(t,x,y);
   return v/trees.length;
 }
+function singleAcc(){
+  if(!trees.length||!pts.length)return 0;
+  let sum=0;
+  for(const t of trees){
+    let ok=0;
+    for(const p of pts)if(treePredict(t,p.x,p.y)===p.c)ok++;
+    sum+=ok/pts.length;
+  }
+  return sum/trees.length*100;
+}
 
 function draw(){
   ctx.clearRect(0,0,W,H);
@@ -186,6 +197,7 @@ function draw(){
     let ok=0;
     for(const p of pts)if((ensembleVote(p.x,p.y)>=0.5?1:0)===p.c)ok++;
     $('acc').textContent=(ok/pts.length*100).toFixed(1)+'%';
+    $('sacc').textContent=singleAcc().toFixed(1)+'%';
   }
   $('done').textContent=trained+' / '+treesN();
 }

@@ -55,6 +55,8 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
   <div class="stats">
     <div class="stat">สมการ: <b id="eq">y = 0.000x + 0.000</b></div>
     <div class="stat">Loss (MSE): <b id="loss">—</b></div>
+    <div class="stat">R²: <b id="r2">—</b></div>
+    <div class="stat">ขั้นตอน (steps): <b id="steps">0</b></div>
     <div class="stat">จำนวนจุด: <b id="n">0</b></div>
   </div>
 </div>
@@ -87,6 +89,13 @@ function inv(c){return {x:(c.x-L)/(W-L-R), y:1-(c.y-T)/(H-T-B)}}
 function mse(){
   if(!points.length)return 0;
   let s=0;for(const p of points){const e=m*p.x+b-p.y;s+=e*e;}return s/points.length;
+}
+function r2(){
+  if(points.length<2)return 0;
+  const ybar=points.reduce((s,p)=>s+p.y,0)/points.length;
+  let ssres=0,sstot=0;
+  for(const p of points){const e=p.y-(m*p.x+b);ssres+=e*e;sstot+=(p.y-ybar)**2;}
+  return sstot?1-ssres/sstot:0;
 }
 function sgdStep(){
   const lr=+$('lr').value;
@@ -169,6 +178,8 @@ function draw(){
   $('eq').textContent='y = '+m.toFixed(3)+'x + '+b.toFixed(3);
   $('loss').textContent=(diverged?'∞ ลู่ออก! ':'')+(points.length?mse().toFixed(4):'—');
   $('n').textContent=points.length;
+  $('steps').textContent=steps;
+  $('r2').textContent=r2().toFixed(3);
 }
 
 function loop(){

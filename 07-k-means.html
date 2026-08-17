@@ -63,6 +63,7 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <div class="stat">Iteration: <b id="iter">0</b></div>
     <div class="stat">SSE (ผลรวมระยะทาง²): <b id="sse">—</b></div>
     <div class="stat">สถานะ: <b id="state">ยังไม่ลู่เข้า</b></div>
+    <div class="stat">จุด/คลัสเตอร์: <b id="sizes">—</b></div>
   </div>
 </div>
 <div class="info">
@@ -188,6 +189,9 @@ function draw(){
   $('iter').textContent=iter;
   $('sse').textContent=pts.length?sse().toFixed(2):'—';
   $('state').textContent=converged?'✅ ลู่เข้าแล้ว':'ยังไม่ลู่เข้า';
+  const cnt=new Array(centroids.length).fill(0);
+  for(const a of assign)cnt[a]++;
+  $('sizes').textContent=cnt.join(' / ');
 }
 function hexA(hex,a){
   const n=parseInt(hex.slice(1),16);

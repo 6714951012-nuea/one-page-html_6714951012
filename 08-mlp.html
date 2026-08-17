@@ -67,6 +67,7 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <div class="stat">อินพุต: <b id="inp">(0, 0)</b></div>
     <div class="stat">ผลทำนาย: <b id="out">—</b></div>
     <div class="stat">คำตอบจริง: <b id="true">0</b></div>
+    <div class="stat">Accuracy (XOR): <b id="acc">0/4</b></div>
   </div>
 </div>
 <div class="info">
@@ -178,6 +179,9 @@ function draw(){
   $('inp').textContent='('+sel[0]+', '+sel[1]+')';
   $('out').textContent=o.toFixed(3);
   $('true').textContent=(sel[0]^sel[1]);
+  let okp=0;
+  for(const [a,b,t] of patterns)if((forward([a,b]).o>=0.5?1:0)===t)okp++;
+  $('acc').textContent=okp+'/4';
 }
 function edge(x1,y1,x2,y2,w){
   const a=Math.min(1,Math.abs(w));

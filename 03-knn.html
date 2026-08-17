@@ -61,6 +61,8 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
   </div>
   <div class="stats">
     <div class="stat">จุดทดสอบถูกจัดเป็น: <b id="pred">—</b></div>
+    <div class="stat">Class 0 / Class 1: <b id="c0n">0</b> / <b id="c1n">0</b></div>
+    <div class="stat">ระยะทางถึงเพื่อนบ้านที่ k: <b id="kd">—</b></div>
     <div class="stat">จำนวนจุด: <b id="n">0</b></div>
   </div>
 </div>
@@ -178,11 +180,15 @@ function draw(){
       ctx.fillStyle='rgba('+col.join(',')+',0.9)';ctx.fill();
       ctx.lineWidth=3;ctx.strokeStyle='#fff';ctx.stroke();
       ctx.beginPath();ctx.arc(qc.x,qc.y,13,0,Math.PI*2);
-      ctx.strokeStyle='rgb('+col.join(',')+')';ctx.stroke();
-      $('pred').innerHTML='<span style="color:rgb('+col.join(',')+')">Class '+r.cls+'</span>';
+      ctx.strokeStyle='rgb('+col.join(',')+')';ctx.stroke();      $('pred').innerHTML='<span style="color:rgb('+col.join(',')+') ">Class '+r.cls+'</span>';
+      const dk=r.nn[r.nn.length-1].d;
+      $('kd').textContent=(metric==='manhattan'?dk:Math.sqrt(dk)).toFixed(3);
     }
   }
   $('n').textContent=pts.length;
+  let c0=0,c1=0;
+  for(const p of pts)p.c===0?c0++:c1++;
+  $('c0n').textContent=c0;$('c1n').textContent=c1;
 }
 
 let moveT=null;

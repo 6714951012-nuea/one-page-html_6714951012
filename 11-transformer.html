@@ -89,6 +89,8 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
   <div class="stats">
     <div class="stat">token ที่กำลังประมวลผล: <b id="cur">—</b></div>
     <div class="stat">d<sub>model</sub> = <b id="dv">8</b></div>
+    <div class="stat">Attention สูงสุด: <b id="maxatt">—</b></div>
+    <div class="stat">ผลรวมแถว: <b id="sumatt">—</b></div>
   </div>
 </div>
 <div class="info">
@@ -178,6 +180,8 @@ function draw(){
   if(row<n){
     const sc=scores[row], pr=attn[row];
     $('cur').textContent=toks[row]+' (แถวที่ '+(row+1)+')';
+    $('maxatt').textContent=Math.max(...pr).toFixed(2);
+    $('sumatt').textContent=pr.reduce((a,b)=>a+b,0).toFixed(2);
     const scEl=$('scores');scEl.innerHTML='';
     for(let j=0;j<n;j++){
       const bar=document.createElement('div');
@@ -195,6 +199,7 @@ function draw(){
     $('out').innerHTML='<span style="font-size:13px">['+o.slice(0,4).map(v=>v.toFixed(2)).join(', ')+', …]</span>';
   }else{
     $('cur').textContent='— เสร็จสิ้นทุก token —';
+    $('maxatt').textContent='—';$('sumatt').textContent='—';
   }
 }
 function doStep(){

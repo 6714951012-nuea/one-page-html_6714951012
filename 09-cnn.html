@@ -85,6 +85,8 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
   <div class="stats">
     <div class="stat">ตำแหน่ง kernel: <b id="pos">(0,0)</b></div>
     <div class="stat">ขนาดอินพุต→FM→Pool: <b id="dims">7×7 → 5×5 → 2×2</b></div>
+    <div class="stat">Max ใน Feature Map: <b id="fmmax">—</b></div>
+    <div class="stat">ค่าเฉลี่ย |FM|: <b id="fmavg">—</b></div>
   </div>
 </div>
 <div class="info">
@@ -203,6 +205,10 @@ function drawKern(){
 }
 function drawAll(){
   drawInp();drawFM();drawKern();
+  let mx=-1e9,sum=0;
+  for(const fr of fmShow)for(const v of fr){mx=Math.max(mx,v);sum+=Math.abs(v);}
+  $('fmmax').textContent=(mx===-1e9?0:mx).toFixed(2);
+  $('fmavg').textContent=(sum/(FM*FM)).toFixed(2);
   const row=Math.floor(pos/FM), col=pos%FM;
   $('pos').textContent='('+row+','+col+')';
   $('dims').textContent='7×7 → 5×5 → 2×2';

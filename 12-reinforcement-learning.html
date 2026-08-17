@@ -51,6 +51,7 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
         <div class="stat">Episode: <b id="ep">0</b></div>
         <div class="stat">รางวัลเฉลี่ย (20 ล่าสุด): <b id="avg">—</b></div>
         <div class="stat">ε (การสำรวจ): <b id="eps">—</b></div>
+    <div class="stat">รางวัลล่าสุด: <b id="lastr">—</b></div>
       </div>
     </div>
   </div>
@@ -234,6 +235,7 @@ function draw(){
   $('eps').textContent=Math.max(0.05,+$('eps0').value-episode*0.0002).toFixed(3);
   const last20=rewards.slice(-20);
   $('avg').textContent=last20.length? (last20.reduce((a,b)=>a+b,0)/last20.length).toFixed(2):'—';
+  $('lastr').textContent=rewards.length?rewards[rewards.length-1].toFixed(2):'—';
   drawChart();
 }
 function drawChart(){

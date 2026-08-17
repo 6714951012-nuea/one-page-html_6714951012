@@ -66,6 +66,8 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <div class="stat">โหนดทั้งหมด: <b id="total">0</b></div>
     <div class="stat">ความลึกสูงสุด: <b id="md">4</b></div>
     <div class="stat">Min samples/ใบ: <b id="ms">8</b></div>
+    <div class="stat">Accuracy (self): <b id="acc">—</b></div>
+    <div class="stat">จำนวนใบ: <b id="leaves">0</b></div>
   </div>
 </div>
 <div class="card">
@@ -109,6 +111,8 @@ function majority(arr){
   const c1=arr.filter(i=>pts[i].c===1).length;
   return c1>=arr.length/2?1:0;
 }
+function predictAt(x,y){let n=root;while(n&&!n.leaf)n=(n.f==='x'?x:y)<=n.t?n.left:n.right;return n?n.label:0;}
+function selfAcc(){if(!pts.length)return 0;let ok=0;for(const p of pts)if(predictAt(p.x,p.y)===p.c)ok++;return ok/pts.length*100;}
 function build(){
   depthCap=+$('depth').value;minS=+$('mins').value;
   $('md').textContent=depthCap;$('ms').textContent=minS;
@@ -193,6 +197,8 @@ function draw(){
     ctx.lineWidth=1;ctx.strokeStyle='rgba(0,0,0,.3)';ctx.stroke();
   }
   $('revealed').textContent=Math.min(revealed,nodes.length);
+  $('acc').textContent=root?selfAcc().toFixed(1)+'%':'—';
+  $('leaves').textContent=nodes.filter(n=>n.leaf).length;
 }
 
 function drawTree(){

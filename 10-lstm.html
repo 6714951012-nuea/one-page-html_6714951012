@@ -61,6 +61,8 @@ code{background:#f1f5f9;padding:2px 6px;border-radius:6px;font-size:13px}
     <div class="stat">Timestep: <b id="t">0 / 6</b></div>
     <div class="stat">อินพุตปัจจุบัน: <b id="x">—</b></div>
     <div class="stat">‖h‖ (ขนาด hidden): <b id="hnorm">—</b></div>
+    <div class="stat">‖c‖ (หน่วยความจำ): <b id="cnorm">—</b></div>
+    <div class="stat">ค่าเฉลี่ย Forget gate: <b id="favg">—</b></div>
   </div>
 </div>
 <div class="card">
@@ -179,6 +181,8 @@ function draw(){
   $('t').textContent=stepIdx+' / '+seq.length;
   $('x').textContent=seq[stepIdx]||'จบ';
   $('hnorm').textContent=hNow.reduce((s,v)=>s+v*v,0).toFixed(3);
+  $('cnorm').textContent=cNow.reduce((s,v)=>s+v*v,0).toFixed(3);
+  $('favg').textContent=(gateVals.f.reduce((a,b)=>a+b,0)/Math.max(1,NH)).toFixed(3);
   drawChart();
 }
 function stateBox(x,y,label,vals,isC){
