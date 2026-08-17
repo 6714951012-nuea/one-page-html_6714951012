@@ -2,6 +2,8 @@
 
 One-page HTML interactive visualizations of machine learning algorithms — แต่ละอัลกอริทึมแยกไฟล์เป็นของตัวเอง เปิดไฟล์ในเบราว์เซอร์ได้ทันที (ไม่ต้องติดตั้งอะไร)
 
+> 🏠 เริ่มจากหน้าแรก: **[index.html](index.html)** — รวมลิงก์ทุกหัวข้อในหน้าเดียว
+
 ## 📂 รายการไฟล์
 
 ### Supervised Learning (การเรียนรู้แบบมีผู้สอน)
